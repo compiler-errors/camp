@@ -1,20 +1,23 @@
 [package]
-name = "oxia"
+name = "camp"
 version = "0.0.1"
 authors = ["Michael Goulet <michael@errs.io>"]
 edition = "2018"
-build = "build.rs"
-exclude = ["test/*"]
-
-[build-dependencies]
-lalrpop = "0.19.5"
+exclude = ["ui_test/*"]
 
 [dependencies]
 codespan-reporting = "0.11.1"
 codespan-derive = { git = "https://github.com/compiler-errors/codespan-derive" }
-structopt = "0.3.21"
-camino = "1.0.4"
-lalrpop-util = "0.19.5"
-regex = "1"
-simple_logger = "1.11.0"
+structopt = "0.3.22"
+camino = "1.0.5"
+regex = "1.5.4"
+simple_logger = "1.13.0"
 log = "0.4.14"
+bumpalo = "3.7.0"
+itertools = "0.10.1"
+termcolor = "1.1.2"
+lazy_static = "1.4.0"
+derivative = "2.2.0"
+
+[features]
+ignore_spans = []

@@ -1,0 +1,82 @@
+Mod {
+    mod_decl: None,
+    items: [
+        Fun {
+            sig: Signature {
+                viz: Private,
+                fn_tok: Fn,
+                ident: Ident {
+                    ident: "foo",
+                },
+                generics: None,
+                where_clause: None,
+                lparen_tok: LParen,
+                parameters: Punctuated {
+                    items: [],
+                    last: None,
+                },
+                rparen_tok: RParen,
+                return_ty: Some(
+                    ReturnTy {
+                        arrow_tok: Arrow,
+                        ty: TyPath {
+                            path: Punctuated {
+                                items: [],
+                                last: Some(
+                                    Ident {
+                                        ident: "i32",
+                                    },
+                                ),
+                            },
+                            generics: None,
+                        },
+                    },
+                ),
+            },
+            body: ExprBlock {
+                lcurly_tok: LCurly,
+                stmts: [],
+                final_expr: Some(
+                    ExprBinary {
+                        left: ExprCast {
+                            expr: Number {
+                                value: "1",
+                            },
+                            as_tok: As,
+                            ty: TyPath {
+                                path: Punctuated {
+                                    items: [],
+                                    last: Some(
+                                        Ident {
+                                            ident: "i32",
+                                        },
+                                    ),
+                                },
+                                generics: None,
+                            },
+                        },
+                        op: Add,
+                        right: ExprCast {
+                            expr: Number {
+                                value: "2",
+                            },
+                            as_tok: As,
+                            ty: TyPath {
+                                path: Punctuated {
+                                    items: [],
+                                    last: Some(
+                                        Ident {
+                                            ident: "i32",
+                                        },
+                                    ),
+                                },
+                                generics: None,
+                            },
+                        },
+                    },
+                ),
+                rcurly_tok: RCurly,
+            },
+        },
+    ],
+}

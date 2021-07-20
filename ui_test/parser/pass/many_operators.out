@@ -1,0 +1,75 @@
+Mod {
+    mod_decl: None,
+    items: [
+        Fun {
+            sig: Signature {
+                viz: Private,
+                fn_tok: Fn,
+                ident: Ident {
+                    ident: "main",
+                },
+                generics: None,
+                where_clause: None,
+                lparen_tok: LParen,
+                parameters: Punctuated {
+                    items: [],
+                    last: None,
+                },
+                rparen_tok: RParen,
+                return_ty: None,
+            },
+            body: ExprBlock {
+                lcurly_tok: LCurly,
+                stmts: [
+                    ExprLet {
+                        let_tok: Let,
+                        pat: PatPath {
+                            path: Punctuated {
+                                items: [],
+                                last: Some(
+                                    Ident {
+                                        ident: "x",
+                                    },
+                                ),
+                            },
+                        },
+                        maybe_ty: None,
+                        eq_tok: Eq,
+                        expr: ExprCall {
+                            expr: ExprAccess {
+                                expr: ExprIndex {
+                                    left: Number {
+                                        value: "1",
+                                    },
+                                    lsq_tok: LSq,
+                                    right: Number {
+                                        value: "2",
+                                    },
+                                    rsq_tok: RSq,
+                                },
+                                dot_tok: Dot,
+                                kind: Number(
+                                    Number {
+                                        value: "3",
+                                    },
+                                ),
+                            },
+                            lparen_tok: LParen,
+                            args: Punctuated {
+                                items: [],
+                                last: Some(
+                                    Number {
+                                        value: "4",
+                                    },
+                                ),
+                            },
+                            rparen_tok: RParen,
+                        },
+                    },
+                ],
+                final_expr: None,
+                rcurly_tok: RCurly,
+            },
+        },
+    ],
+}

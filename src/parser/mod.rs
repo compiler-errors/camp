@@ -1,182 +1,320 @@
-use camino::{Utf8Path, Utf8PathBuf};
-use lalrpop_util::ParseError;
+use crate::lexer::{tok as lex, Span, TokenBuffer};
+use crate::result::{Error, Result};
 
-pub use crate::parser::ast::*;
-use crate::{
-    files::{FileId, Files},
-    result::{Error, Result},
-};
+use self::misc::Punctuated;
+use self::tok::{LCurly, LParen, LSq, RCurly, RParen, RSq};
 
-mod ast;
-/// The parser lives in this module.
-pub mod oxia;
+pub mod expr;
+pub mod item;
+pub mod misc;
+pub mod pat;
+pub mod tok;
+pub mod ty;
+#[cfg(test)]
+mod ui_test;
 
-pub fn parse_root_module(files: &mut Files, root: &Utf8Path) -> Result<Module> {
-    // TODO(michael): Verify that root is called "main.ox" and the
-
-    // The submod path of the root is the root file's containing directory.
-    // This is where we will look for "child" modules of the root module.
-    let submod_path = root
-        .parent()
-        .ok_or_else(|| Error::NoParent(root.to_owned()))?
-        .to_owned();
-
-    parse_module(files, &submod_path, root, "$", None)
+#[derive(Clone)]
+pub struct ParseContext<'token> {
+    pub tokens: &'token [lex::Token],
+    expected: Vec<&'static str>,
+    last_span: Span,
 }
 
-/// Given a submodule path and a module name, calculate the child module's
-/// submod_path, and the path of the module's code.
-pub fn module_path_from_parent(
-    files: &mut Files,
-    submod_path: &Utf8Path,
-    mod_name: &Spanned<String>,
-) -> Result<(Utf8PathBuf, Utf8PathBuf)> {
-    // The directory that submodules of this module will live. This does not
-    // necessarily exist.
-    let submod_path = submod_path.join(&mod_name.item);
+impl<'token> ParseContext<'token> {
+    fn new(buf: &'token TokenBuffer) -> ParseContext<'token> {
+        ParseContext {
+            tokens: buf.tokens.as_slice(),
+            expected: vec![],
+            last_span: buf.last_span,
+        }
+    }
 
-    // The path that is formed by taking `/<mod_name>/mod.ox`
-    let path_mod_ox = submod_path.join("mod.ox");
-    // The path that is formed by taking `/<mod_name>.ox`
-    let mut path_file_ox = submod_path.clone();
-    path_file_ox.set_extension("ox");
+    pub fn peek_tok(&self) -> Option<&'token lex::Token> {
+        self.tokens.first()
+    }
 
-    trace!("Looking for {} at: {}", mod_name.item, path_mod_ox);
-    trace!("Looking for {} at: {}", mod_name.item, path_file_ox);
+    pub fn peek_tok_n(&self, idx: usize) -> Option<&'token lex::Token> {
+        self.tokens.get(idx)
+    }
 
-    if path_mod_ox.exists() && path_mod_ox.is_file() {
-        if path_file_ox.exists() && path_file_ox.is_file() {
-            Err(Error::DuplicateModuleFile {
-                file1: path_mod_ox,
-                file2: path_file_ox,
-                mod_name: mod_name.item.clone(),
-                span: mod_name.span,
-            })
+    pub fn next_span(&self) -> Span {
+        self.peek_tok().map_or(self.last_span, lex::Token::span)
+    }
+
+    pub fn bump_tok(&mut self) -> Option<&'token lex::Token> {
+        if let Some((first, rest)) = self.tokens.split_first() {
+            self.expected.clear();
+            self.tokens = rest;
+            Some(first)
         } else {
-            Ok((submod_path, path_mod_ox))
-        }
-    } else if path_file_ox.exists() && path_file_ox.is_file() {
-        Ok((submod_path, path_file_ox))
-    } else {
-        Err(Error::NoSuchModule {
-            mod_name: mod_name.item.clone(),
-            span: mod_name.span,
-        })
-    }
-}
-
-pub fn parse_module(
-    files: &mut Files,
-    submod_path: &Utf8Path,
-    file_path: &Utf8Path,
-    file_name: &str,
-    file_name_span: Option<Span>,
-) -> Result<Module> {
-    let (file_id, contents) = files.open(file_path)?;
-
-    // The root file does not have a Span, since it's not declared as a `mod
-    // X;` anywhere else. Set its span to be the 1st character of its file.
-    let file_name_span = file_name_span.unwrap_or(Span(file_id, 0, 0));
-
-    // Map individual parser error types to their corresponding Oxia errors.
-    let mut module = oxia::FileModuleParser::new()
-        .parse(
-            files,
-            file_id,
-            &Spanned {
-                item: file_name.to_owned(),
-                span: file_name_span,
-            },
-            &contents,
-        )
-        .map_err(|err| match err {
-            ParseError::User { error } => error,
-
-            ParseError::InvalidToken { location } =>
-                Error::InvalidToken(Span(file_id, location, location)),
-
-            ParseError::ExtraToken {
-                token: (left, tok, right),
-            } => Error::ExtraToken {
-                token: tok.to_string(),
-                span: Span(file_id, left, right),
-            },
-
-            ParseError::UnrecognizedToken {
-                token: (left, tok, right),
-                expected,
-            } => Error::UnrecognizedToken {
-                token: tok.to_string(),
-                expected: concat_tokens(expected),
-                span: Span(file_id, left, right),
-            },
-
-            ParseError::UnrecognizedEOF { location, expected } => Error::UnrecognizedToken {
-                token: "EOF".to_string(),
-                expected: concat_tokens(expected),
-                span: Span(file_id, location, location),
-            },
-        })?;
-
-    // Recursively expand any `mod submodule;` into its actual module contents. This
-    // is done in-place.
-    expand_submodules(files, &mut module, submod_path)?;
-
-    Ok(module)
-}
-
-/// Recursively expand any `ModuleItem::ModuleDeclaration` items into
-/// `ModuleItem::Module`. That is, given a parsed `mod submodule;` fetch the
-/// file corresponding to that submodule and insert its contents into the module
-/// tree in-place.
-fn expand_submodules(files: &mut Files, module: &mut Module, submod_path: &Utf8Path) -> Result<()> {
-    for item in &mut module.items {
-        match item {
-            // Follow submodules
-            ModuleItem::Module(module) => {
-                let submod_path = submod_path.join(&module.mod_name.item);
-                expand_submodules(files, module, &submod_path)?;
-            },
-            ModuleItem::ModuleDeclaration(mod_name) => {
-                // Calculate the `submod_path` and `file_path` of the given submodule. The
-                // submod_path will be where this submodule's children are located, and the
-                // file_path is where the definition of this submodule is located.
-                let (submod_path, file_path) =
-                    module_path_from_parent(files, submod_path, mod_name)?;
-                // Parse the submodule just like any other module!
-                let new_item = ModuleItem::Module(parse_module(
-                    files,
-                    &submod_path,
-                    &file_path,
-                    &mod_name.item,
-                    Some(mod_name.span),
-                )?);
-                // Replace this ModuleDeclaration with a real Module
-                *item = new_item;
-            },
-            _ => {},
+            None
         }
     }
 
-    Ok(())
-}
+    pub fn peek<T: Peek>(&mut self) -> bool {
+        self.internal_expect::<T>();
+        T::peek(self)
+    }
 
-fn concat_tokens(mut tokens: Vec<String>) -> String {
-    match tokens.len() {
-        0 => unreachable!(),
-        1 => tokens.into_iter().next().unwrap(),
-        n => {
-            let last = tokens.pop().unwrap();
-            let mut string = tokens.join(", ");
+    pub fn peek2<T: Peek>(&self) -> bool {
+        // Make a lookahead parse context, moved forward one token.
+        let lookahead = ParseContext {
+            tokens: self.tokens.split_first().map_or(&[], |(_, rest)| rest),
+            expected: vec![],
+            last_span: self.last_span,
+        };
+        T::peek(&lookahead)
+    }
 
-            if n == 2 {
-                string.push_str(" or ");
-            } else {
-                string.push_str(", or ");
+    pub fn parse<T: Parse>(&mut self) -> Result<T> {
+        T::parse(self)
+    }
+
+    pub fn parse_punctuated<T: Parse, S: Parse, EndTok: Peek>(
+        mut self,
+        _end_tok: EndTok,
+    ) -> Result<Punctuated<T, S>> {
+        let mut ret = Punctuated::new();
+
+        loop {
+            if self.peek_tok().is_none() {
+                break;
             }
 
-            string.push_str(&last);
-            string
-        },
+            self.internal_expect::<EndTok>();
+            ret.push(self.parse()?);
+
+            if self.peek_tok().is_none() {
+                break;
+            }
+
+            self.internal_expect::<EndTok>();
+            ret.push_punct(self.parse()?);
+        }
+
+        Ok(ret)
     }
+
+    pub fn parse_between_curlys(&mut self) -> Result<(LCurly, ParseContext<'token>, RCurly)> {
+        let lcurly_tok = if let Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
+            delimiter: lex::TokenDelim::Curly,
+            span,
+        })) = self.peek_tok()
+        {
+            self.bump_tok()
+                .expect("Expected a token because it was peeked");
+            LCurly { span: *span }
+        } else {
+            self.internal_expect::<LCurly>();
+            self.error_exhausted()?;
+        };
+
+        let tokens = self.tokens;
+        let mut scanned = 0;
+        let mut curly_count = 0;
+
+        loop {
+            match self.bump_tok() {
+                Some(lex::Token::EndDelim(lex::TokenEndDelim {
+                    delimiter: lex::TokenDelim::Curly,
+                    span,
+                })) =>
+                    if curly_count == 0 {
+                        let rcurly_tok = RCurly { span: *span };
+                        let contents = ParseContext {
+                            tokens: &tokens[0..scanned],
+                            expected: vec![],
+                            last_span: *span,
+                        };
+                        return Ok((lcurly_tok, contents, rcurly_tok));
+                    } else {
+                        curly_count -= 1;
+                    },
+                Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
+                    delimiter: lex::TokenDelim::Curly,
+                    span: _,
+                })) => {
+                    curly_count += 1;
+                },
+                Some(_) => { /* Do nothing */ },
+                None => unreachable!(),
+            }
+
+            scanned += 1;
+        }
+    }
+
+    pub fn parse_between_sqs(&mut self) -> Result<(LSq, ParseContext<'token>, RSq)> {
+        let lsq_tok = if let Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
+            delimiter: lex::TokenDelim::Sq,
+            span,
+        })) = self.peek_tok()
+        {
+            self.bump_tok()
+                .expect("Expected a token because it was peeked");
+            LSq { span: *span }
+        } else {
+            self.internal_expect::<LSq>();
+            self.error_exhausted()?;
+        };
+
+        let tokens = self.tokens;
+        let mut scanned = 0;
+        let mut sq_count = 0;
+
+        loop {
+            match self.bump_tok() {
+                Some(lex::Token::EndDelim(lex::TokenEndDelim {
+                    delimiter: lex::TokenDelim::Sq,
+                    span,
+                })) =>
+                    if sq_count == 0 {
+                        let rsq_tok = RSq { span: *span };
+                        let contents = ParseContext {
+                            tokens: &tokens[0..scanned],
+                            expected: vec![],
+                            last_span: *span,
+                        };
+                        return Ok((lsq_tok, contents, rsq_tok));
+                    } else {
+                        sq_count -= 1;
+                    },
+                Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
+                    delimiter: lex::TokenDelim::Sq,
+                    span: _,
+                })) => {
+                    sq_count += 1;
+                },
+                Some(_) => { /* Do nothing */ },
+                None => unreachable!(),
+            }
+
+            scanned += 1;
+        }
+    }
+
+    pub fn parse_between_parens(&mut self) -> Result<(LParen, ParseContext<'token>, RParen)> {
+        let lparen_tok = if let Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
+            delimiter: lex::TokenDelim::Paren,
+            span,
+        })) = self.peek_tok()
+        {
+            self.bump_tok()
+                .expect("Expected a token because it was peeked");
+            LParen { span: *span }
+        } else {
+            self.internal_expect::<LParen>();
+            self.error_exhausted()?;
+        };
+
+        let tokens = self.tokens;
+        let mut scanned = 0;
+        let mut paren_count = 0;
+
+        loop {
+            match self.bump_tok() {
+                Some(lex::Token::EndDelim(lex::TokenEndDelim {
+                    delimiter: lex::TokenDelim::Paren,
+                    span,
+                })) =>
+                    if paren_count == 0 {
+                        let rparen_tok = RParen { span: *span };
+                        let contents = ParseContext {
+                            tokens: &tokens[0..scanned],
+                            expected: vec![],
+                            last_span: *span,
+                        };
+                        return Ok((lparen_tok, contents, rparen_tok));
+                    } else {
+                        paren_count -= 1;
+                    },
+                Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
+                    delimiter: lex::TokenDelim::Paren,
+                    span: _,
+                })) => {
+                    paren_count += 1;
+                },
+                Some(_) => { /* Do nothing */ },
+                None => unreachable!(),
+            }
+
+            scanned += 1;
+        }
+    }
+
+    pub fn expect_empty<EndTok: Peek>(mut self, _end_tok: EndTok) -> Result<()> {
+        if self.peek_tok().is_some() {
+            self.internal_expect::<EndTok>();
+            self.error_exhausted()?;
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn error_exhausted(&mut self) -> Result<!> {
+        let mut expected = String::new();
+
+        for (i, tok) in self.expected.iter().enumerate() {
+            if i == self.expected.len() - 1 {
+                if i > 1 {
+                    expected.push_str(", or ");
+                } else if i == 1 {
+                    expected.push_str(" or ");
+                }
+            } else if i > 0 {
+                expected.push_str(", ");
+            }
+
+            expected.push_str(*tok);
+        }
+
+        Err(Error::ExpectedTokens(self.next_span(), expected))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tokens.is_empty()
+    }
+
+    fn internal_expect<T: Peek>(&mut self) {
+        let name = T::name();
+        if !self.expected.contains(&name) {
+            self.expected.push(name);
+        }
+    }
+}
+
+pub trait Parse: Sized {
+    fn parse(input: &mut ParseContext<'_>) -> Result<Self>;
+}
+
+impl<T: Parse> Parse for Box<T> {
+    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
+        input.parse().map(Box::new)
+    }
+}
+
+pub trait ShouldParse: Sized + Parse {
+    fn should_parse(input: &mut ParseContext<'_>) -> bool;
+}
+
+impl<T: Peek + Parse> ShouldParse for T {
+    fn should_parse(input: &mut ParseContext<'_>) -> bool {
+        T::peek(input)
+    }
+}
+
+impl<T: ShouldParse> Parse for Option<T> {
+    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
+        if T::should_parse(input) {
+            Ok(Some(T::parse(input)?))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+pub trait Peek: Sized {
+    fn peek(input: &ParseContext<'_>) -> bool;
+
+    fn name() -> &'static str;
 }

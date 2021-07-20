@@ -1,0 +1,6 @@
+error: Let statement is not allowed in expression position
+  ┌─ $DIR/let_expr.camp:2:9
+  │
+2 │     1 + let x = 1;
+  │         ^^^^^^^^^
+

@@ -1,3 +1,4 @@
+/// Generates an newtype wrapper around a usize
 #[macro_export]
 macro_rules! id_type {
     ($visibility: vis $name: ident) => {
@@ -10,6 +11,11 @@ macro_rules! id_type {
                     std::sync::atomic::AtomicUsize::new(0);
 
                 Self(INCR.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+            }
+
+            #[cfg(test)]
+            pub fn fake() -> Self {
+                Self(0)
             }
         }
 

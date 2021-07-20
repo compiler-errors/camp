@@ -1,0 +1,8 @@
+error: This expression is not callable
+  ┌─ $DIR/cannot_call_cast.camp:2:5
+  │
+2 │     1 as i32()
+  │     ^^^^^^^^
+  │
+  = Enclose the expression in parenthesis to make it callable
+

@@ -1,0 +1,72 @@
+Mod {
+    mod_decl: None,
+    items: [
+        Fun {
+            sig: Signature {
+                viz: Private,
+                fn_tok: Fn,
+                ident: Ident {
+                    ident: "main",
+                },
+                generics: None,
+                where_clause: None,
+                lparen_tok: LParen,
+                parameters: Punctuated {
+                    items: [],
+                    last: None,
+                },
+                rparen_tok: RParen,
+                return_ty: None,
+            },
+            body: ExprBlock {
+                lcurly_tok: LCurly,
+                stmts: [
+                    ExprLet {
+                        let_tok: Let,
+                        pat: PatPath {
+                            path: Punctuated {
+                                items: [],
+                                last: Some(
+                                    Ident {
+                                        ident: "x",
+                                    },
+                                ),
+                            },
+                        },
+                        maybe_ty: None,
+                        eq_tok: Eq,
+                        expr: ExprBinary {
+                            left: ExprBinary {
+                                left: ExprBinary {
+                                    left: Number {
+                                        value: "2",
+                                    },
+                                    op: Multiply,
+                                    right: Number {
+                                        value: "3",
+                                    },
+                                },
+                                op: Add,
+                                right: ExprBinary {
+                                    left: Number {
+                                        value: "4",
+                                    },
+                                    op: Multiply,
+                                    right: Number {
+                                        value: "5",
+                                    },
+                                },
+                            },
+                            op: Add,
+                            right: Number {
+                                value: "6",
+                            },
+                        },
+                    },
+                ],
+                final_expr: None,
+                rcurly_tok: RCurly,
+            },
+        },
+    ],
+}
