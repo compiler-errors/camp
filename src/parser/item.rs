@@ -8,12 +8,16 @@ use super::pat::Pat;
 use super::ty::{TraitGenerics, TraitTy, Ty, TyPath};
 use super::{tok, Parse, ParseContext, ShouldParse};
 use crate::files::{calculate_submod_path, Files};
+use crate::id_type;
 use crate::lexer::lex_file;
 use crate::parser::ty::TraitTyPath;
 use crate::result::{Error, Result};
 
+id_type!(pub ModId);
+
 #[derive(Debug)]
 pub struct Mod {
+    id: ModId,
     mod_decl: Option<ModDecl>,
     items: Vec<ModuleItem>,
 }
@@ -29,6 +33,7 @@ impl Mod {
         let input = ParseContext::new(&buf);
 
         Ok(Mod {
+            id: ModId::new(),
             mod_decl,
             items: Mod::parse_items(input, files, submod_path)?,
         })
@@ -80,6 +85,7 @@ impl Mod {
             let (_, contents, _) = input.parse_between_curlys()?;
 
             Ok(Mod {
+                id: ModId::new(),
                 mod_decl: Some(mod_decl),
                 items: Mod::parse_items(contents, files, submod_path)?,
             })
@@ -206,8 +212,11 @@ impl ShouldParse for UseRename {
     }
 }
 
+id_type!(pub StructId);
+
 #[derive(Debug)]
 pub struct Struct {
+    pub id: StructId,
     pub viz: Visibility,
     pub struct_tok: tok::Struct,
     pub ident: tok::Ident,
@@ -239,6 +248,7 @@ impl Parse for Struct {
         };
 
         Ok(Struct {
+            id: StructId::new(),
             viz,
             struct_tok,
             ident,
@@ -397,8 +407,11 @@ impl Parse for TypeRestriction {
     }
 }
 
+id_type!(pub EnumId);
+
 #[derive(Debug)]
 pub struct Enum {
+    pub id: EnumId,
     pub viz: Visibility,
     pub enum_tok: tok::Enum,
     pub ident: tok::Ident,
@@ -420,6 +433,7 @@ impl Parse for Enum {
         let (lcurly_tok, contents, rcurly_tok) = input.parse_between_curlys()?;
 
         Ok(Enum {
+            id: EnumId::new(),
             viz,
             enum_tok,
             ident,
@@ -447,8 +461,11 @@ impl Parse for EnumVariant {
     }
 }
 
+id_type!(pub FnId);
+
 #[derive(Debug)]
 pub struct Fun {
+    pub id: FnId,
     pub sig: Signature,
     pub body: Expr,
 }
@@ -456,6 +473,7 @@ pub struct Fun {
 impl Parse for Fun {
     fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
         Ok(Fun {
+            id: FnId::new(),
             sig: input.parse()?,
             body: Expr::expr_block(input)?,
         })
@@ -515,8 +533,11 @@ impl Parse for Parameter {
     }
 }
 
+id_type!(pub TraitId);
+
 #[derive(Debug)]
 pub struct Trait {
+    pub id: TraitId,
     pub viz: Visibility,
     pub fn_tok: tok::Trait,
     pub ident: tok::Ident,
@@ -547,6 +568,7 @@ impl Parse for Trait {
         contents.expect_empty(rcurly_tok)?;
 
         Ok(Trait {
+            id: TraitId::new(),
             viz,
             fn_tok,
             ident,
@@ -617,8 +639,11 @@ impl Parse for TraitType {
     }
 }
 
+id_type!(pub ImplId);
+
 #[derive(Debug)]
 pub struct Impl {
+    pub id: ImplId,
     pub impl_tok: tok::Impl,
     pub generics: Option<GenericsDecl>,
     pub impl_trait: Option<ImplTrait>,
@@ -669,6 +694,7 @@ impl Parse for Impl {
         contents.expect_empty(rcurly_tok)?;
 
         Ok(Impl {
+            id: ImplId::new(),
             impl_tok,
             generics,
             impl_trait,
