@@ -1,0 +1,11 @@
+[package]
+name = "camp_lex"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+camino = "1.0.5"
+camp_diagnostic = { path = "../camp_diagnostic" }
+camp_files = { path = "../camp_files" }
+camp_util = { path = "../camp_util" }
+codespan-derive = "0.1.0"

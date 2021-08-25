@@ -1,19 +1,18 @@
+mod error;
+
 use std::{convert::TryInto, sync::Arc};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use camp_diagnostic::{bail, err, Result};
+use camp_util::{FileId, Span};
 use codespan_reporting::files::SimpleFiles;
+use log::trace;
 
-use crate::{
-    id_type,
-    lexer::Span,
-    result::{Error, Result},
-};
+use error::FileError;
 
 pub struct Files {
     files: SimpleFiles<Utf8PathBuf, Arc<str>>,
 }
-
-id_type!(pub FileId);
 
 impl Files {
     pub fn new() -> Files {
@@ -23,13 +22,19 @@ impl Files {
     }
 
     pub fn open(&mut self, path: &Utf8Path) -> Result<(FileId, Arc<str>)> {
-        let canonical_path: Utf8PathBuf = path.canonicalize()?.try_into()?;
+        let canonical_path: Utf8PathBuf = path
+            .canonicalize()
+            .map_err(FileError::Io)?
+            .try_into()
+            .map_err(FileError::NotUtf8)?;
 
         if !path.is_file() {
-            return Err(Error::NotFile(canonical_path));
+            bail!(FileError::NotFile(canonical_path));
         }
 
-        let contents: Arc<str> = std::fs::read_to_string(&canonical_path)?.into();
+        let contents: Arc<str> = std::fs::read_to_string(&canonical_path)
+            .map_err(FileError::Io)?
+            .into();
 
         Ok((
             self.files.add(canonical_path, contents.clone()).into(),
@@ -71,7 +76,7 @@ pub fn calculate_submod_path(
 
     if path_mod_camp.exists() && path_mod_camp.is_file() {
         if path_file_camp.exists() && path_file_camp.is_file() {
-            Err(Error::DuplicateModuleFile {
+            err!(FileError::DuplicateModuleFile {
                 file1: path_mod_camp,
                 file2: path_file_camp,
                 mod_name: mod_name.to_owned(),
@@ -83,7 +88,7 @@ pub fn calculate_submod_path(
     } else if path_file_camp.exists() && path_file_camp.is_file() {
         Ok((submod_path, path_file_camp))
     } else {
-        Err(Error::NoSuchModule {
+        err!(FileError::NoSuchModule {
             mod_name: mod_name.to_owned(),
             span: mod_name_span,
         })

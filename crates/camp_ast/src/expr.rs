@@ -1,17 +1,15 @@
+use camp_diagnostic::{bail, err, Result};
+use camp_parse::{Parse, ParseContext, Punctuated, ShouldParse};
+use camp_util::Span;
 use derivative::Derivative;
 
 use crate::{
-    lexer::Span,
-    parser::{
-        misc::{PathSegment, Punctuated, ReturnTy},
-        pat::Pat,
-        tok,
-        ty::{Generics, Ty, TyElaborated},
-        Parse,
-        ParseContext,
-        ShouldParse,
-    },
-    result::{Error, Result},
+    error::AstError,
+    misc::{PathSegment, ReturnTy},
+    pat::Pat,
+    tok,
+    tok::ParseContextExt,
+    ty::{Generics, Ty, TyElaborated},
 };
 
 #[repr(usize)]
@@ -361,7 +359,7 @@ impl Expr {
         if allow_let {
             Ok(expr)
         } else {
-            Err(Error::DisallowLet(expr.span()))
+            err!(AstError::DisallowLet(expr.span()))
         }
     }
 
@@ -551,7 +549,7 @@ impl Expr {
 
     fn expr_call(input: &mut ParseContext<'_>, expr: Expr) -> Result<Expr> {
         if !expr.is_callable() {
-            return Err(Error::NotCallable(expr.span()));
+            bail!(AstError::NotCallable(expr.span()));
         }
 
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;

@@ -1,21 +1,19 @@
 use camino::Utf8Path;
+use camp_diagnostic::{bail, Result};
+use camp_files::{calculate_submod_path, Files};
+use camp_lex::lex_file;
+use camp_parse::{Parse, ParseContext, Punctuated, ShouldParse};
+use camp_util::id_type;
 use derivative::Derivative;
 
 use crate::{
-    files::{calculate_submod_path, Files},
-    id_type,
-    lexer::lex_file,
-    parser::{
-        expr::Expr,
-        misc::{GenericsDecl, Punctuated, ReturnTy, Supertraits, Visibility},
-        pat::Pat,
-        tok,
-        ty::{TraitGenerics, TraitTy, TraitTyPath, Ty, TyPath},
-        Parse,
-        ParseContext,
-        ShouldParse,
-    },
-    result::{Error, Result},
+    error::AstError,
+    expr::Expr,
+    misc::{GenericsDecl, ReturnTy, Supertraits, Visibility},
+    pat::Pat,
+    tok,
+    tok::ParseContextExt,
+    ty::{TraitGenerics, TraitTy, TraitTyPath, Ty, TyPath},
 };
 
 id_type!(pub ModId);
@@ -245,7 +243,7 @@ impl Parse for Struct {
             Fields::None => (where_clause, Some(input.parse()?)),
             Fields::Positional(_) => {
                 if let Some(where_clause) = where_clause {
-                    return Err(Error::ImproperWhere(where_clause.where_tok.span));
+                    bail!(AstError::ImproperWhere(where_clause.where_tok.span));
                 }
                 // Parse optional trailing where clause and semicolon token
                 (input.parse()?, Some(input.parse()?))
@@ -682,7 +680,7 @@ impl Parse for Impl {
                     });
                     ty = input.parse()?;
                 },
-                ty => return Err(Error::NotATrait(ty.span())),
+                ty => bail!(AstError::NotATrait(ty.span())),
             }
         } else {
             impl_trait = None;

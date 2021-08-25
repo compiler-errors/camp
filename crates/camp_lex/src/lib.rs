@@ -1,40 +1,22 @@
-use camino::Utf8Path;
-use codespan_derive::IntoLabel;
-
-use crate::{
-    files::{FileId, Files},
-    lexer::tok::{
-        Token,
-        TokenBeginDelim,
-        TokenDelim,
-        TokenEndDelim,
-        TokenIdent,
-        TokenLiteral,
-        TokenLiteralKind,
-        TokenPunct,
-    },
-    result::{Error, Result},
-};
-
+mod error;
 pub mod tok;
 
-#[derive(Debug, Copy, Clone)]
-pub struct Span(pub FileId, pub usize, pub usize);
+use camino::Utf8Path;
+use camp_diagnostic::{bail, err, Result};
+use camp_files::Files;
+use camp_util::{FileId, Span};
 
-impl Span {
-    pub fn until(self, other: Span) -> Span {
-        assert_eq!(self.0, other.0, "Can only unify spans of the same file!");
-        Span(self.0, self.1.min(other.1), self.2.max(other.2))
-    }
-}
-
-impl IntoLabel for Span {
-    type FileId = FileId;
-
-    fn into_label(&self, style: codespan_derive::LabelStyle) -> codespan_derive::Label<FileId> {
-        codespan_derive::Label::new(style, self.0, self.1..self.2)
-    }
-}
+use error::LexError;
+use tok::{
+    Token,
+    TokenBeginDelim,
+    TokenDelim,
+    TokenEndDelim,
+    TokenIdent,
+    TokenLiteral,
+    TokenLiteralKind,
+    TokenPunct,
+};
 
 pub struct TokenBuffer {
     pub tokens: Vec<Token>,
@@ -77,7 +59,7 @@ impl Lexer<'_> {
                     _ => self.token(first_char),
                 }?)
             } else if let Some((delim_span, delim)) = self.delimiters.last() {
-                return Err(Error::ExpectedDelimiter(
+                bail!(LexError::ExpectedDelimiter(
                     *delim_span,
                     *delim,
                     self.next_span(),
@@ -139,7 +121,7 @@ impl Lexer<'_> {
                 let begin_span = self.bump_n(2);
                 loop {
                     if self.char().is_none() {
-                        return Err(Error::EofInComment(begin_span.until(self.next_span())));
+                        bail!(LexError::EofInComment(begin_span.until(self.next_span())));
                     } else if self.starts_with("*/") {
                         self.bump_n(2);
                         break;
@@ -182,7 +164,7 @@ impl Lexer<'_> {
 
         match self.delimiters.pop() {
             Some((old_span, old_delimiter)) if old_delimiter != delimiter => {
-                return Err(Error::MismatchedDelimiter(
+                bail!(LexError::MismatchedDelimiter(
                     old_span,
                     old_delimiter,
                     span,
@@ -190,7 +172,7 @@ impl Lexer<'_> {
                 ));
             },
             None => {
-                return Err(Error::UnexpectedDelimiter(span, delimiter));
+                bail!(LexError::UnexpectedDelimiter(span, delimiter));
             },
             _ => { /* Good */ },
         }
@@ -252,7 +234,7 @@ impl Lexer<'_> {
             }
 
             if number.ends_with('_') {
-                return Err(Error::InvalidNumericLiteral(
+                bail!(LexError::InvalidNumericLiteral(
                     begin_span.until(last_span),
                     number,
                 ));
@@ -272,7 +254,7 @@ impl Lexer<'_> {
             }
 
             if self.char().is_none() {
-                return Err(Error::InvalidNumericLiteral(
+                bail!(LexError::InvalidNumericLiteral(
                     begin_span.until(last_span),
                     number,
                 ));
@@ -288,7 +270,7 @@ impl Lexer<'_> {
             }
 
             if number.ends_with('_') {
-                return Err(Error::InvalidNumericLiteral(
+                bail!(LexError::InvalidNumericLiteral(
                     begin_span.until(last_span),
                     number,
                 ));
@@ -310,7 +292,7 @@ impl Lexer<'_> {
         let char = if let Some(char) = self.char() {
             char
         } else {
-            return Err(Error::EofInChar(begin_span.until(self.next_span())));
+            bail!(LexError::EofInChar(begin_span.until(self.next_span())));
         };
 
         let char_span = self.bump();
@@ -324,7 +306,7 @@ impl Lexer<'_> {
                     literal: TokenLiteralKind::Char(char),
                 }))
             } else {
-                Err(Error::ExpectedQuote(self.next_span()))
+                err!(LexError::ExpectedQuote(self.next_span()))
             }
         } else if let Some('\'') = self.char() {
             let last_span = self.bump();
@@ -351,7 +333,7 @@ impl Lexer<'_> {
                 literal: TokenLiteralKind::Lifetime(lifetime),
             }))
         } else {
-            Err(Error::ExpectedQuote(self.next_span()))
+            err!(LexError::ExpectedQuote(self.next_span()))
         }
     }
 
@@ -359,7 +341,7 @@ impl Lexer<'_> {
         let char = if let Some(char) = self.char() {
             char
         } else {
-            return Err(Error::EofInEscape(self.next_span()));
+            bail!(LexError::EofInEscape(self.next_span()));
         };
 
         match char {
@@ -371,7 +353,7 @@ impl Lexer<'_> {
                 self.bump();
                 Ok(char)
             },
-            _ => Err(Error::UnexpectedEscape(
+            _ => err!(LexError::UnexpectedEscape(
                 back_span.until(self.next_span()),
                 char,
             )),
@@ -396,14 +378,14 @@ impl Lexer<'_> {
                     string.push(self.escaped_char(back_span)?);
                 },
                 Some('\n') => {
-                    return Err(Error::EolInString(begin_span.until(self.next_span())));
+                    bail!(LexError::EolInString(begin_span.until(self.next_span())));
                 },
                 Some(c) => {
                     self.bump();
                     string.push(c);
                 },
                 None => {
-                    return Err(Error::EofInString(begin_span.until(self.next_span())));
+                    bail!(LexError::EofInString(begin_span.until(self.next_span())));
                 },
             }
         }
@@ -450,7 +432,10 @@ impl Lexer<'_> {
                 trailing_whitespace,
             }))
         } else {
-            Err(Error::UnrecognizedCharacter(self.next_span(), first_char))
+            err!(LexError::UnrecognizedCharacter(
+                self.next_span(),
+                first_char
+            ))
         }
     }
 }

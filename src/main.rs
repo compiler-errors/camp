@@ -1,30 +1,16 @@
-#![feature(never_type)]
-#![feature(extended_key_value_attributes)]
-#![feature(or_patterns)]
-#![feature(unwrap_infallible)]
-
-#[macro_use]
-extern crate log;
+mod error;
 
 use camino::Utf8PathBuf;
-use codespan_derive::IntoDiagnostic;
+use camp_ast::item::Mod;
+use camp_diagnostic::{err, Result};
+use camp_files::{calculate_root_path, Files};
+use camp_lex::lex_file;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 use structopt::StructOpt;
 use termcolor::{ColorChoice, StandardStream};
 
-use files::{calculate_root_path, Files};
-use lexer::lex_file;
-use parser::item::Mod;
-use result::{Error, Result};
-
-pub mod files;
-pub mod lexer;
-pub mod parser;
-pub mod result;
-#[cfg(test)]
-mod ui_test;
-pub mod util;
+use crate::error::DriverError;
 
 #[derive(StructOpt, Debug)]
 struct Args {
@@ -112,7 +98,7 @@ fn main() -> ! {
     let output = match args.mode {
         Mode::Lex { file } => lex_stage(&mut files, file),
         Mode::Parse { root, root_file } => parse_stage(&mut files, root, root_file),
-        mode => Err(Error::UnsupportedMode(mode.name())),
+        mode => err!(DriverError::UnsupportedMode(mode.name())),
     };
 
     std::process::exit(match output {

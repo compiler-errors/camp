@@ -13,7 +13,6 @@ macro_rules! id_type {
                 Self(INCR.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
             }
 
-            #[cfg(test)]
             pub fn fake() -> Self {
                 Self(0)
             }
@@ -32,3 +31,7 @@ macro_rules! id_type {
         }
     };
 }
+
+// This id type is declared here since it is a dependency of camp_diagnostic,
+// which is a dependency of camp_files.
+id_type!(pub FileId);

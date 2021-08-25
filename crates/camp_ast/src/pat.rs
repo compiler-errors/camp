@@ -1,9 +1,8 @@
+use camp_diagnostic::Result;
+use camp_parse::{Parse, ParseContext, Punctuated, ShouldParse};
 use derivative::Derivative;
 
-use crate::{
-    parser::{misc::Punctuated, tok, ty::Generics, Parse, ParseContext, ShouldParse},
-    result::Result,
-};
+use crate::{tok, tok::ParseContextExt, ty::Generics};
 
 #[derive(Derivative)]
 #[derivative(Debug)]

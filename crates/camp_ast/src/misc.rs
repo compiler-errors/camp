@@ -1,80 +1,12 @@
+use camp_diagnostic::{err, Result};
+use camp_parse::{Parse, ParseContext, Punctuated, ShouldParse};
+use camp_util::Span;
+
 use crate::{
-    lexer::Span,
-    parser::{
-        tok::{self, Lifetime},
-        ty::{Generics, TraitTy, Ty},
-        Parse,
-        ParseContext,
-        ShouldParse,
-    },
-    result::{Error, Result},
+    error::AstError,
+    tok,
+    ty::{Generics, TraitTy, Ty},
 };
-
-#[derive(Debug)]
-pub struct Punctuated<T, S> {
-    items: Vec<(T, S)>,
-    last: Option<Box<T>>,
-}
-
-impl<T, S> Punctuated<T, S> {
-    pub fn new() -> Punctuated<T, S> {
-        Punctuated {
-            items: vec![],
-            last: None,
-        }
-    }
-
-    pub fn push(&mut self, t: T) {
-        assert!(self.last.is_none());
-        self.last = Some(Box::new(t));
-    }
-
-    pub fn push_punct(&mut self, s: S) {
-        let t = self.last.take().unwrap();
-        self.items.push((*t, s))
-    }
-
-    pub fn pop_punct(&mut self) -> S {
-        assert!(self.last.is_none());
-        let (t, s) = self.items.pop().unwrap();
-        self.last = Some(Box::new(t));
-        s
-    }
-
-    pub fn len(&self) -> usize {
-        self.items.len() + (self.last.is_some() as usize)
-    }
-
-    pub fn trailing(&self) -> bool {
-        // If there's at least one item, and not a item at the end
-        !self.items.is_empty() && self.last.is_none()
-    }
-
-    pub fn unwrap_one(self) -> T {
-        assert!(self.items.is_empty());
-        *self.last.unwrap()
-    }
-
-    pub fn map<T2>(self, mut f: impl FnMut(T) -> T2) -> Punctuated<T2, S> {
-        Punctuated {
-            items: self.items.into_iter().map(|(t, s)| (f(t), s)).collect(),
-            last: self.last.map(|t| Box::new(f(*t))),
-        }
-    }
-
-    pub fn first(&self) -> Option<&T> {
-        self.items
-            .first()
-            .map(|(t, _)| t)
-            .or_else(|| self.last.as_deref())
-    }
-
-    pub fn last(&self) -> Option<&T> {
-        self.last
-            .as_deref()
-            .or_else(|| self.items.last().map(|(t, _)| t))
-    }
-}
 
 #[derive(Debug)]
 pub enum Visibility {
@@ -85,7 +17,7 @@ pub enum Visibility {
 impl Visibility {
     pub fn do_not_expect(input: &mut ParseContext<'_>) -> Result<()> {
         if input.peek::<tok::Pub>() {
-            Err(Error::UnexpectedPub(input.next_span()))
+            err!(AstError::UnexpectedPub(input.next_span()))
         } else {
             Ok(())
         }
@@ -256,7 +188,7 @@ impl ShouldParse for Supertraits {
 #[derive(Debug)]
 pub enum Supertrait {
     Trait(TraitTy),
-    Lifetime(Lifetime),
+    Lifetime(tok::Lifetime),
 }
 
 impl Supertrait {

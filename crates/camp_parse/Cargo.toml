@@ -1,0 +1,12 @@
+[package]
+name = "camp_parse"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+camp_diagnostic = { path = "../camp_diagnostic" }
+camp_lex = { path = "../camp_lex" }
+camp_util = { path = "../camp_util" }
+codespan-derive = "0.1.0"

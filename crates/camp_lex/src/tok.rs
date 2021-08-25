@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use crate::lexer::Span;
+use camp_util::Span;
 
 #[derive(Debug)]
 pub enum Token {

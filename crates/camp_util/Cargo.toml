@@ -1,0 +1,11 @@
+[package]
+name = "camp_util"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+camino = "1.0.5"
+lazy_static = "1.4.0"
+log = "0.4.14"
+termcolor = "1.1.2"
+codespan-derive = "0.1.0"

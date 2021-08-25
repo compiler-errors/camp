@@ -1,6 +1,6 @@
 use camino::Utf8PathBuf;
 
-use crate::ui_test as framework;
+use camp_util::ui_test as framework;
 
 #[test]
 fn ui_tests() -> framework::Result<()> {

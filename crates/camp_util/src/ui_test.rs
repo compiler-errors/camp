@@ -2,6 +2,7 @@ use std::{convert::TryInto, io::Write, process::Command, sync::Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use lazy_static::lazy_static;
+use log::debug;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + 'static>>;
@@ -61,9 +62,13 @@ pub struct UITest {
 }
 
 pub fn get_ui_test_files(dir_name: &str) -> Result<Vec<UITest>> {
-    let dir_path: Utf8PathBuf = Utf8PathBuf::from(format!("ui_test/{}/", dir_name))
+    let dir_path = Utf8PathBuf::from(format!("../../ui_test/{}/", dir_name));
+    let dir_path: Utf8PathBuf = dir_path
         .canonicalize()
-        .expect("Expected to be able to canonicalize path")
+        .expect(&format!(
+            "Expected to be able to canonicalize path: {}",
+            dir_path
+        ))
         .try_into()
         .expect("Expected canonicalized path to be utf-8");
     assert!(dir_path.is_dir(), "Expected {} to be a directory", dir_path);
@@ -100,10 +105,11 @@ pub fn cargo_run(args: &[&str]) -> Result<(bool, String, String)> {
     let output = Command::new("cargo")
         .arg("run")
         .arg("--quiet")
-        .arg("--features=ignore_spans")
+        .arg("--features=camp_ast/ignore_spans")
         .arg("--")
         .arg("--no-color")
         .args(args)
+        .current_dir("../..")
         .output()?;
 
     Ok((
