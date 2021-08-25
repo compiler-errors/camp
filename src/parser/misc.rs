@@ -1,8 +1,14 @@
-use super::tok::{self, Lifetime};
-use super::ty::{Generics, TraitTy, Ty};
-use super::{Parse, ParseContext, ShouldParse};
-use crate::lexer::Span;
-use crate::result::{Error, Result};
+use crate::{
+    lexer::Span,
+    parser::{
+        tok::{self, Lifetime},
+        ty::{Generics, TraitTy, Ty},
+        Parse,
+        ParseContext,
+        ShouldParse,
+    },
+    result::{Error, Result},
+};
 
 #[derive(Debug)]
 pub struct Punctuated<T, S> {

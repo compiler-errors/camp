@@ -1,11 +1,18 @@
 use derivative::Derivative;
 
-use super::misc::{PathSegment, ReturnTy};
-use super::tok;
-use super::ty::{Generics, TyElaborated};
-use super::{misc::Punctuated, pat::Pat, ty::Ty, Parse, ParseContext, ShouldParse};
-use crate::lexer::Span;
-use crate::result::{Error, Result};
+use crate::{
+    lexer::Span,
+    parser::{
+        misc::{PathSegment, Punctuated, ReturnTy},
+        pat::Pat,
+        tok,
+        ty::{Generics, Ty, TyElaborated},
+        Parse,
+        ParseContext,
+        ShouldParse,
+    },
+    result::{Error, Result},
+};
 
 #[repr(usize)]
 enum Prec {

@@ -1,17 +1,22 @@
 use camino::Utf8Path;
 use derivative::Derivative;
 
-use super::expr::Expr;
-use super::misc::{GenericsDecl, Punctuated, Visibility};
-use super::misc::{ReturnTy, Supertraits};
-use super::pat::Pat;
-use super::ty::{TraitGenerics, TraitTy, Ty, TyPath};
-use super::{tok, Parse, ParseContext, ShouldParse};
-use crate::files::{calculate_submod_path, Files};
-use crate::id_type;
-use crate::lexer::lex_file;
-use crate::parser::ty::TraitTyPath;
-use crate::result::{Error, Result};
+use crate::{
+    files::{calculate_submod_path, Files},
+    id_type,
+    lexer::lex_file,
+    parser::{
+        expr::Expr,
+        misc::{GenericsDecl, Punctuated, ReturnTy, Supertraits, Visibility},
+        pat::Pat,
+        tok,
+        ty::{TraitGenerics, TraitTy, TraitTyPath, Ty, TyPath},
+        Parse,
+        ParseContext,
+        ShouldParse,
+    },
+    result::{Error, Result},
+};
 
 id_type!(pub ModId);
 

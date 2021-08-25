@@ -1,7 +1,9 @@
 use derivative::Derivative;
 
-use super::{misc::Punctuated, tok, ty::Generics, Parse, ParseContext, ShouldParse};
-use crate::result::Result;
+use crate::{
+    parser::{misc::Punctuated, tok, ty::Generics, Parse, ParseContext, ShouldParse},
+    result::Result,
+};
 
 #[derive(Derivative)]
 #[derivative(Debug)]

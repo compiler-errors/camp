@@ -1,13 +1,16 @@
 use derivative::Derivative;
 
-use super::misc::Supertraits;
-use super::tok;
-use super::{
-    misc::{Mutability, Punctuated, ReturnTy, Supertrait},
-    Parse, ParseContext, ShouldParse,
+use crate::{
+    lexer::Span,
+    parser::{
+        misc::{Mutability, Punctuated, ReturnTy, Supertrait, Supertraits},
+        tok,
+        Parse,
+        ParseContext,
+        ShouldParse,
+    },
+    result::Result,
 };
-use crate::lexer::Span;
-use crate::result::Result;
 
 #[derive(Derivative)]
 #[derivative(Debug)]

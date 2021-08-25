@@ -3,14 +3,6 @@
 #![feature(or_patterns)]
 #![feature(unwrap_infallible)]
 
-pub mod files;
-pub mod lexer;
-pub mod parser;
-pub mod result;
-#[cfg(test)]
-mod ui_test;
-pub mod util;
-
 #[macro_use]
 extern crate log;
 
@@ -19,12 +11,20 @@ use codespan_derive::IntoDiagnostic;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 use structopt::StructOpt;
+use termcolor::{ColorChoice, StandardStream};
 
 use files::{calculate_root_path, Files};
 use lexer::lex_file;
 use parser::item::Mod;
 use result::{Error, Result};
-use termcolor::{ColorChoice, StandardStream};
+
+pub mod files;
+pub mod lexer;
+pub mod parser;
+pub mod result;
+#[cfg(test)]
+mod ui_test;
+pub mod util;
 
 #[derive(StructOpt, Debug)]
 struct Args {

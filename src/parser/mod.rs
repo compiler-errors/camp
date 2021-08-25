@@ -1,8 +1,11 @@
-use crate::lexer::{tok as lex, Span, TokenBuffer};
-use crate::result::{Error, Result};
-
-use self::misc::Punctuated;
-use self::tok::{LCurly, LParen, LSq, RCurly, RParen, RSq};
+use crate::{
+    lexer::{tok as lex, Span, TokenBuffer},
+    parser::{
+        misc::Punctuated,
+        tok::{LCurly, LParen, LSq, RCurly, RParen, RSq},
+    },
+    result::{Error, Result},
+};
 
 pub mod expr;
 pub mod item;

@@ -1,12 +1,22 @@
-pub mod tok;
-
-use crate::files::{FileId, Files};
-use crate::lexer::tok::{TokenBeginDelim, TokenDelim, TokenEndDelim, TokenIdent};
-use crate::result::{Error, Result};
 use camino::Utf8Path;
 use codespan_derive::IntoLabel;
 
-use self::tok::{Token, TokenLiteral, TokenLiteralKind, TokenPunct};
+use crate::{
+    files::{FileId, Files},
+    lexer::tok::{
+        Token,
+        TokenBeginDelim,
+        TokenDelim,
+        TokenEndDelim,
+        TokenIdent,
+        TokenLiteral,
+        TokenLiteralKind,
+        TokenPunct,
+    },
+    result::{Error, Result},
+};
+
+pub mod tok;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Span(pub FileId, pub usize, pub usize);

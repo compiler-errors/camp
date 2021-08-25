@@ -1,8 +1,8 @@
-use crate::lexer::tok as lex;
-use crate::lexer::Span;
-use crate::parser::ParseContext;
-use crate::parser::{Parse, Peek};
-use crate::result::Result;
+use crate::{
+    lexer::{tok as lex, Span},
+    parser::{Parse, ParseContext, Peek},
+    result::Result,
+};
 
 macro_rules! declare_identifiers {
     ($($keyword:literal => $name:ident ,)* _ => $ident_name:ident $(,)?) => {

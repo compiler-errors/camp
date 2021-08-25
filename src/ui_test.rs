@@ -1,6 +1,4 @@
-use std::io::Write;
-use std::sync::Mutex;
-use std::{convert::TryInto, process::Command};
+use std::{convert::TryInto, io::Write, process::Command, sync::Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use lazy_static::lazy_static;
