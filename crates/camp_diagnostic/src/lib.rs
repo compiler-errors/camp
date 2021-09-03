@@ -1,4 +1,4 @@
-use camp_util::FileId;
+use camp_files::FileId;
 use codespan_derive::{Diagnostic, IntoDiagnostic};
 
 pub type Result<T, E = DiagnosticError> = std::result::Result<T, E>;

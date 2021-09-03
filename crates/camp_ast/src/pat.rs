@@ -2,7 +2,7 @@ use camp_diagnostic::Result;
 use camp_parse::{Parse, ParseContext, Punctuated, ShouldParse};
 use derivative::Derivative;
 
-use crate::{tok, tok::ParseContextExt, ty::Generics};
+use crate::{tok, tok::ParseBetween, ty::Generics};
 
 #[derive(Derivative)]
 #[derivative(Debug)]

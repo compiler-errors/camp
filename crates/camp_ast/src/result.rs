@@ -1,4 +1,4 @@
-use camp_util::{FileId, Span};
+use camp_files::{FileId, Span};
 use codespan_derive::IntoDiagnostic;
 
 #[derive(IntoDiagnostic)]

@@ -1,4 +1,4 @@
-mod error;
+mod result;
 pub mod expr;
 pub mod item;
 pub mod misc;

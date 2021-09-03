@@ -1,12 +1,12 @@
 use camp_diagnostic::Result;
 use camp_parse::{Parse, ParseContext, Punctuated, ShouldParse};
-use camp_util::Span;
+use camp_files::Span;
 use derivative::Derivative;
 
 use crate::{
     misc::{Mutability, ReturnTy, Supertrait, Supertraits},
     tok,
-    tok::ParseContextExt,
+    tok::ParseBetween,
 };
 
 #[derive(Derivative)]

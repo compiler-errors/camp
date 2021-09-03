@@ -1,14 +1,18 @@
-mod error;
+mod result;
 
 use std::{convert::TryInto, sync::Arc};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use camp_diagnostic::{bail, err, Result};
-use camp_util::{FileId, Span};
 use codespan_reporting::files::SimpleFiles;
 use log::trace;
+use camp_util::id_type;
+use codespan_derive::IntoLabel;
 
-use error::FileError;
+use crate::result::{FileError, Result};
+
+// This id type is declared here since it is a dependency of camp_diagnostic,
+// which is a dependency of camp_files.
+id_type!(pub FileId);
 
 pub struct Files {
     files: SimpleFiles<Utf8PathBuf, Arc<str>>,
@@ -29,7 +33,7 @@ impl Files {
             .map_err(FileError::NotUtf8)?;
 
         if !path.is_file() {
-            bail!(FileError::NotFile(canonical_path));
+            return Err(FileError::NotFile(canonical_path));
         }
 
         let contents: Arc<str> = std::fs::read_to_string(&canonical_path)
@@ -76,7 +80,7 @@ pub fn calculate_submod_path(
 
     if path_mod_camp.exists() && path_mod_camp.is_file() {
         if path_file_camp.exists() && path_file_camp.is_file() {
-            err!(FileError::DuplicateModuleFile {
+            Err(FileError::DuplicateModuleFile {
                 file1: path_mod_camp,
                 file2: path_file_camp,
                 mod_name: mod_name.to_owned(),
@@ -88,7 +92,7 @@ pub fn calculate_submod_path(
     } else if path_file_camp.exists() && path_file_camp.is_file() {
         Ok((submod_path, path_file_camp))
     } else {
-        err!(FileError::NoSuchModule {
+        Err(FileError::NoSuchModule {
             mod_name: mod_name.to_owned(),
             span: mod_name_span,
         })
@@ -128,5 +132,23 @@ impl<'alloc> codespan_reporting::files::Files<'alloc> for Files {
         line_index: usize,
     ) -> Result<std::ops::Range<usize>, codespan_reporting::files::Error> {
         self.files.line_range(id.0, line_index)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Span(pub FileId, pub usize, pub usize);
+
+impl Span {
+    pub fn until(self, other: Span) -> Span {
+        assert_eq!(self.0, other.0, "Can only unify spans of the same file!");
+        Span(self.0, self.1.min(other.1), self.2.max(other.2))
+    }
+}
+
+impl IntoLabel for Span {
+    type FileId = FileId;
+
+    fn into_label(&self, style: codespan_derive::LabelStyle) -> codespan_derive::Label<FileId> {
+        codespan_derive::Label::new(style, self.0, self.1..self.2)
     }
 }

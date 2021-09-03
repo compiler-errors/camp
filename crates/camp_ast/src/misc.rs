@@ -1,9 +1,9 @@
 use camp_diagnostic::{err, Result};
 use camp_parse::{Parse, ParseContext, Punctuated, ShouldParse};
-use camp_util::Span;
+use camp_files::Span;
 
 use crate::{
-    error::AstError,
+    result::AstError,
     tok,
     ty::{Generics, TraitTy, Ty},
 };

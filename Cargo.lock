@@ -76,6 +76,7 @@ dependencies = [
 name = "camp_diagnostic"
 version = "0.1.0"
 dependencies = [
+ "camp_files",
  "camp_util",
  "codespan-derive",
 ]
@@ -85,7 +86,6 @@ name = "camp_files"
 version = "0.1.0"
 dependencies = [
  "camino",
- "camp_diagnostic",
  "camp_util",
  "codespan-derive",
  "codespan-reporting",
@@ -108,6 +108,7 @@ name = "camp_parse"
 version = "0.1.0"
 dependencies = [
  "camp_diagnostic",
+ "camp_files",
  "camp_lex",
  "camp_util",
  "codespan-derive",

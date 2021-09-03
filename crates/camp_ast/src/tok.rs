@@ -1,7 +1,7 @@
-use camp_diagnostic::Result;
 use camp_lex::tok as lex;
 use camp_parse::{Parse, ParseContext, Peek};
-use camp_util::Span;
+use camp_files::Span;
+use camp_diagnostic::Result;
 
 macro_rules! declare_identifiers {
     ($($keyword:literal => $name:ident ,)* _ => $ident_name:ident $(,)?) => {
@@ -462,145 +462,63 @@ impl Peek for RParen {
     }
 }
 
-pub trait ParseContextExt<'token> {
+pub trait ParseBetween<'token> {
     fn parse_between_curlys(&mut self) -> Result<(LCurly, ParseContext<'token>, RCurly)>;
     fn parse_between_sqs(&mut self) -> Result<(LSq, ParseContext<'token>, RSq)>;
     fn parse_between_parens(&mut self) -> Result<(LParen, ParseContext<'token>, RParen)>;
 }
 
-impl<'token> ParseContextExt<'token> for ParseContext<'token> {
-    fn parse_between_curlys(&mut self) -> Result<(LCurly, ParseContext<'token>, RCurly)> {
-        let lcurly_tok = if let Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
-            delimiter: lex::TokenDelim::Curly,
-            span,
-        })) = self.peek_tok()
-        {
-            self.bump_tok()
-                .expect("Expected a token because it was peeked");
-            LCurly { span: *span }
-        } else {
-            self.also_expect::<LCurly>();
-            self.error_exhausted()?;
-        };
-
-        let tokens = self.tokens;
-        let mut scanned = 0;
-        let mut curly_count = 0;
-
-        loop {
-            match self.bump_tok() {
-                Some(lex::Token::EndDelim(lex::TokenEndDelim {
-                    delimiter: lex::TokenDelim::Curly,
-                    span,
-                })) =>
-                    if curly_count == 0 {
-                        let rcurly_tok = RCurly { span: *span };
-                        let contents = ParseContext::new_from_parts(&tokens[0..scanned], *span);
-                        return Ok((lcurly_tok, contents, rcurly_tok));
-                    } else {
-                        curly_count -= 1;
+macro_rules! generate_between_fn {
+    ($name: ident, $kind: ident, $L: ident, $R: ident) => {
+        fn $name(&mut self) -> Result<($L, ParseContext<'token>, $R)> {
+            let left_tok = if let Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
+                delimiter: lex::TokenDelim::$kind,
+                span,
+            })) = self.peek_tok()
+            {
+                self.bump_tok()
+                    .expect("Expected a token because it was peeked");
+                $L { span: *span }
+            } else {
+                self.also_expect::<$L>();
+                self.error_exhausted()?;
+            };
+    
+            let tokens = self.tokens;
+            let mut scanned = 0;
+            let mut count = 0;
+    
+            loop {
+                match self.bump_tok() {
+                    Some(lex::Token::EndDelim(lex::TokenEndDelim {
+                        delimiter: lex::TokenDelim::$kind,
+                        span,
+                    })) =>
+                        if count == 0 {
+                            let right_tok = $R { span: *span };
+                            let contents = ParseContext::new_from_parts(&tokens[0..scanned], *span);
+                            return Ok((left_tok, contents, right_tok));
+                        } else {
+                            count -= 1;
+                        },
+                    Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
+                        delimiter: lex::TokenDelim::$kind,
+                        span: _,
+                    })) => {
+                        count += 1;
                     },
-                Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
-                    delimiter: lex::TokenDelim::Curly,
-                    span: _,
-                })) => {
-                    curly_count += 1;
-                },
-                Some(_) => { /* Do nothing */ },
-                None => unreachable!(),
+                    Some(_) => { /* Do nothing */ },
+                    None => unreachable!(),
+                }
+    
+                scanned += 1;
             }
-
-            scanned += 1;
         }
-    }
+    };
+}
 
-    fn parse_between_sqs(&mut self) -> Result<(LSq, ParseContext<'token>, RSq)> {
-        let lsq_tok = if let Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
-            delimiter: lex::TokenDelim::Sq,
-            span,
-        })) = self.peek_tok()
-        {
-            self.bump_tok()
-                .expect("Expected a token because it was peeked");
-            LSq { span: *span }
-        } else {
-            self.also_expect::<LSq>();
-            self.error_exhausted()?;
-        };
-
-        let tokens = self.tokens;
-        let mut scanned = 0;
-        let mut sq_count = 0;
-
-        loop {
-            match self.bump_tok() {
-                Some(lex::Token::EndDelim(lex::TokenEndDelim {
-                    delimiter: lex::TokenDelim::Sq,
-                    span,
-                })) =>
-                    if sq_count == 0 {
-                        let rsq_tok = RSq { span: *span };
-                        let contents = ParseContext::new_from_parts(&tokens[0..scanned], *span);
-                        return Ok((lsq_tok, contents, rsq_tok));
-                    } else {
-                        sq_count -= 1;
-                    },
-                Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
-                    delimiter: lex::TokenDelim::Sq,
-                    span: _,
-                })) => {
-                    sq_count += 1;
-                },
-                Some(_) => { /* Do nothing */ },
-                None => unreachable!(),
-            }
-
-            scanned += 1;
-        }
-    }
-
-    fn parse_between_parens(&mut self) -> Result<(LParen, ParseContext<'token>, RParen)> {
-        let lparen_tok = if let Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
-            delimiter: lex::TokenDelim::Paren,
-            span,
-        })) = self.peek_tok()
-        {
-            self.bump_tok()
-                .expect("Expected a token because it was peeked");
-            LParen { span: *span }
-        } else {
-            self.also_expect::<LParen>();
-            self.error_exhausted()?;
-        };
-
-        let tokens = self.tokens;
-        let mut scanned = 0;
-        let mut paren_count = 0;
-
-        loop {
-            match self.bump_tok() {
-                Some(lex::Token::EndDelim(lex::TokenEndDelim {
-                    delimiter: lex::TokenDelim::Paren,
-                    span,
-                })) =>
-                    if paren_count == 0 {
-                        let rparen_tok = RParen { span: *span };
-                        let contents = ParseContext::new_from_parts(&tokens[0..scanned], *span);
-                        return Ok((lparen_tok, contents, rparen_tok));
-                    } else {
-                        paren_count -= 1;
-                    },
-                Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
-                    delimiter: lex::TokenDelim::Paren,
-                    span: _,
-                })) => {
-                    paren_count += 1;
-                },
-                Some(_) => { /* Do nothing */ },
-                None => unreachable!(),
-            }
-
-            scanned += 1;
-        }
-    }
+impl<'token> ParseBetween<'token> for ParseContext<'token> {
+    generate_between_fn!(parse_between_curlys, Curly, LCurly, RCurly);
+    generate_between_fn!(parse_between_sqs, Sq, LSq, RSq);
+    generate_between_fn!(parse_between_parens, Paren, LParen, RParen);
 }

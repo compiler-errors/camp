@@ -7,12 +7,12 @@ use camp_util::id_type;
 use derivative::Derivative;
 
 use crate::{
-    error::AstError,
+    result::AstError,
     expr::Expr,
     misc::{GenericsDecl, ReturnTy, Supertraits, Visibility},
     pat::Pat,
     tok,
-    tok::ParseContextExt,
+    tok::ParseBetween,
     ty::{TraitGenerics, TraitTy, TraitTyPath, Ty, TyPath},
 };
 

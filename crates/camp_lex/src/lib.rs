@@ -1,12 +1,12 @@
-mod error;
+mod result;
 pub mod tok;
 
 use camino::Utf8Path;
 use camp_diagnostic::{bail, err, Result};
 use camp_files::Files;
-use camp_util::{FileId, Span};
+use camp_files::{FileId, Span};
 
-use error::LexError;
+use result::LexError;
 use tok::{
     Token,
     TokenBeginDelim,

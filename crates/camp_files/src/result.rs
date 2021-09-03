@@ -1,6 +1,9 @@
 use camino::{FromPathBufError, Utf8PathBuf};
-use camp_util::{FileId, Span};
 use codespan_derive::IntoDiagnostic;
+
+use crate::{FileId, Span};
+
+pub type Result<T, E = FileError> = std::result::Result<T, E>;
 
 #[derive(IntoDiagnostic)]
 #[file_id(FileId)]

@@ -1,12 +1,12 @@
 #![feature(never_type)]
 
-mod error;
+mod result;
 
 use camp_diagnostic::{err, Result};
 use camp_lex::{tok::Token as LexToken, TokenBuffer};
-use camp_util::Span;
+use camp_files::Span;
 
-use error::ParseError;
+use result::ParseError;
 
 #[derive(Clone)]
 pub struct ParseContext<'token> {

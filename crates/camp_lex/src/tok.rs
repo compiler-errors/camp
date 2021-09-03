@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use camp_util::Span;
+use camp_files::Span;
 
 #[derive(Debug)]
 pub enum Token {
