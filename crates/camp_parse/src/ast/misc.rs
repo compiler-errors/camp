@@ -2,7 +2,7 @@ use camp_files::Span;
 
 use crate::ast::{Generics, TraitTy, Ty};
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, AstError, AstResult};
+use crate::{tok, ParseError, ParseResult};
 
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub enum Visibility {
@@ -11,9 +11,9 @@ pub enum Visibility {
 }
 
 impl Visibility {
-    pub fn do_not_expect(input: &mut ParseBuffer<'_>) -> AstResult<()> {
+    pub fn do_not_expect(input: &mut ParseBuffer<'_>) -> ParseResult<()> {
         if input.peek::<tok::Pub>() {
-            Err(AstError::UnexpectedViz(input.next_span()))
+            Err(ParseError::UnexpectedViz(input.next_span()))
         } else {
             Ok(())
         }
@@ -22,9 +22,8 @@ impl Visibility {
 
 impl Parse for Visibility {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         if input.peek::<tok::Pub>() {
             Ok(Visibility::Pub(input.parse()?, input.parse()?))
         } else {
@@ -42,9 +41,8 @@ pub struct VisibilityRange {
 
 impl Parse for VisibilityRange {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let (lparen_tok, mut contents, rparen_tok) = input.parse_between_parens()?;
         let kind = contents.parse()?;
         contents.expect_empty(rparen_tok)?;
@@ -72,9 +70,8 @@ pub enum VisibilityRangeKind {
 
 impl Parse for VisibilityRangeKind {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(if input.peek::<tok::Mod>() {
             VisibilityRangeKind::Mod(input.parse()?)
         } else if input.peek::<tok::Super>() {
@@ -95,9 +92,8 @@ pub enum Mutability {
 
 impl Parse for Mutability {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         if input.peek::<tok::Mut>() {
             Ok(Mutability::Mut(input.parse()?))
         } else {
@@ -115,9 +111,8 @@ pub struct GenericsDecl {
 
 impl Parse for GenericsDecl {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let lt_tok = input.parse()?;
         let mut generics = Punctuated::new();
 
@@ -163,9 +158,8 @@ enum GenericDecl {
 
 impl Parse for GenericDecl {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(if input.peek::<tok::Lifetime>() {
             GenericDecl::Lifetime(input.parse()?)
         } else if input.peek::<tok::Ident>() {
@@ -184,9 +178,8 @@ struct GenericLifetime {
 
 impl Parse for GenericLifetime {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(GenericLifetime {
             lifetime: input.parse()?,
             maybe_bounds: input.parse()?,
@@ -202,9 +195,8 @@ struct GenericType {
 
 impl Parse for GenericType {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(GenericType {
             ident: input.parse()?,
             maybe_bounds: input.parse()?,
@@ -221,7 +213,7 @@ pub struct Supertraits {
 impl Supertraits {
     pub fn parse_supertrait_list(
         input: &mut ParseBuffer<'_>,
-    ) -> AstResult<Punctuated<Supertrait, tok::Plus>> {
+    ) -> ParseResult<Punctuated<Supertrait, tok::Plus>> {
         let mut traits = Punctuated::new();
 
         loop {
@@ -240,9 +232,8 @@ impl Supertraits {
 
 impl Parse for Supertraits {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let colon_tok = input.parse()?;
         let traits = Supertraits::parse_supertrait_list(input)?;
 
@@ -273,9 +264,8 @@ impl Supertrait {
 
 impl Parse for Supertrait {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(if input.peek::<tok::Lifetime>() {
             Supertrait::Lifetime(input.parse()?)
         } else {
@@ -292,9 +282,8 @@ pub struct ReturnTy {
 
 impl Parse for ReturnTy {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(ReturnTy {
             arrow_tok: input.parse()?,
             ty: input.parse()?,
@@ -321,9 +310,8 @@ pub enum PathSegment {
 
 impl Parse for PathSegment {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(if input.peek::<tok::Site>() {
             PathSegment::Site(input.parse()?)
         } else if input.peek::<tok::Super>() {

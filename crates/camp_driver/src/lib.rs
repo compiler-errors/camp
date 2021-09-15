@@ -3,11 +3,11 @@ mod result;
 
 pub use camp_files::CampsiteDecl;
 use camp_files::{FilesDb, FilesStorage};
-use camp_parse::{AstDb, AstStorage};
+use camp_parse::{ParseDb, ParseStorage};
 
 pub use crate::result::{DriverError, DriverResult};
 
-#[salsa::database(AstStorage, FilesStorage)]
+#[salsa::database(ParseStorage, FilesStorage)]
 #[derive(Default)]
 pub struct CampDb {
     storage: salsa::Storage<Self>,

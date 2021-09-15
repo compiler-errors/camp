@@ -2,7 +2,7 @@ use derivative::Derivative;
 
 use crate::ast::Generics;
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, AstError, AstResult};
+use crate::{tok, ParseResult};
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]
@@ -27,9 +27,8 @@ pub enum Pat {
 
 impl Parse for Pat {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let mut pats = Punctuated::new();
 
         loop {
@@ -51,7 +50,7 @@ impl Parse for Pat {
 }
 
 impl Pat {
-    fn pat_alternative(input: &mut ParseBuffer<'_>) -> AstResult<Pat> {
+    fn pat_alternative(input: &mut ParseBuffer<'_>) -> ParseResult<Pat> {
         // this peek will cover ..= and ... as well
         Ok(if input.peek::<tok::DotDot>() {
             Pat::pat_range(input, None)?
@@ -65,7 +64,7 @@ impl Pat {
         })
     }
 
-    fn pat_range(input: &mut ParseBuffer<'_>, left: Option<Box<Pat>>) -> AstResult<Pat> {
+    fn pat_range(input: &mut ParseBuffer<'_>, left: Option<Box<Pat>>) -> ParseResult<Pat> {
         let right = if input.peek::<tok::DotDotDot>() {
             RangeEnding::Open(input.parse()?)
         } else if input.peek::<tok::DotDotEq>() {
@@ -79,7 +78,7 @@ impl Pat {
         Ok(Pat::Range(PatRange { left, right }))
     }
 
-    fn pat_simple(input: &mut ParseBuffer<'_>) -> AstResult<Pat> {
+    fn pat_simple(input: &mut ParseBuffer<'_>) -> ParseResult<Pat> {
         Ok(if input.peek::<tok::Underscore>() {
             Pat::Underscore(input.parse()?)
         } else if input.peek::<tok::Number>() {
@@ -95,7 +94,7 @@ impl Pat {
         })
     }
 
-    fn pat_ident(input: &mut ParseBuffer<'_>) -> AstResult<Pat> {
+    fn pat_ident(input: &mut ParseBuffer<'_>) -> ParseResult<Pat> {
         let mut path = Punctuated::new();
 
         loop {
@@ -172,9 +171,8 @@ pub struct PatGroup {
 
 impl Parse for PatGroup {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
         Ok(PatGroup {
@@ -204,9 +202,8 @@ pub enum PatFields {
 
 impl Parse for PatFields {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(if input.peek::<tok::LCurly>() {
             PatFields::Named(input.parse()?)
         } else if input.peek::<tok::LParen>() {
@@ -226,9 +223,8 @@ pub struct FieldsNamed {
 
 impl Parse for FieldsNamed {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let (lcurly_tok, contents, rcurly_tok) = input.parse_between_curlys()?;
 
         Ok(FieldsNamed {
@@ -247,9 +243,8 @@ pub struct FieldNamed {
 
 impl Parse for FieldNamed {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(FieldNamed {
             ident: input.parse()?,
             pat: input.parse()?,
@@ -265,9 +260,8 @@ pub struct NamedEnding {
 
 impl Parse for NamedEnding {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(NamedEnding {
             colon_tok: input.parse()?,
             pat: input.parse()?,
@@ -290,9 +284,8 @@ pub struct FieldsPositional {
 
 impl Parse for FieldsPositional {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
         Ok(FieldsPositional {
@@ -312,9 +305,8 @@ pub struct PatArray {
 
 impl Parse for PatArray {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let (lsq_tok, contents, rsq_tok) = input.parse_between_sqs()?;
 
         Ok(PatArray {

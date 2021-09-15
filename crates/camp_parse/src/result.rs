@@ -3,11 +3,11 @@ use camp_files::{FileError, FileId, Span};
 use camp_lex::LexError;
 use codespan_derive::IntoDiagnostic;
 
-pub type AstResult<T> = std::result::Result<T, AstError>;
+pub type ParseResult<T> = std::result::Result<T, ParseError>;
 
 #[derive(IntoDiagnostic, Debug, PartialEq, Eq, Clone)]
 #[file_id(FileId)]
-pub enum AstError {
+pub enum ParseError {
     #[message = "Expected {1}"]
     ExpectedTokens(#[primary] Span, String),
     #[message = "Visiblity attribute not expected here"]
@@ -49,14 +49,14 @@ pub enum AstError {
     LexError(LexError),
 }
 
-impl From<FileError> for AstError {
+impl From<FileError> for ParseError {
     fn from(e: FileError) -> Self {
-        AstError::FileError(e)
+        ParseError::FileError(e)
     }
 }
 
-impl From<LexError> for AstError {
+impl From<LexError> for ParseError {
     fn from(e: LexError) -> Self {
-        AstError::LexError(e)
+        ParseError::LexError(e)
     }
 }

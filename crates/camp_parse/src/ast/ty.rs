@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::ast::{Mutability, ReturnTy, Supertrait, Supertraits};
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
 use crate::tok::{self};
-use crate::{AstError, AstResult};
+use crate::ParseResult;
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]
@@ -35,7 +35,7 @@ pub enum Ty {
 }
 
 impl Ty {
-    fn non_assoc(input: &mut ParseBuffer<'_>) -> AstResult<Self> {
+    fn non_assoc(input: &mut ParseBuffer<'_>) -> ParseResult<Self> {
         Ok(if input.peek::<tok::Lt>() {
             Ty::Elaborated(input.parse()?)
         } else if input.peek::<tok::LParen>() {
@@ -111,9 +111,8 @@ impl Ty {
 
 impl Parse for Ty {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let mut ty = Ty::non_assoc(input)?;
 
         while ty.is_associable() && input.peek::<tok::ColonColon>() {
@@ -141,9 +140,8 @@ pub struct TyElaborated {
 
 impl Parse for TyElaborated {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(TyElaborated {
             lt_tok: input.parse()?,
             ty: input.parse()?,
@@ -161,9 +159,8 @@ pub struct AsTrait {
 
 impl Parse for AsTrait {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(AsTrait {
             as_tok: input.parse()?,
             trait_ty: input.parse()?,
@@ -193,9 +190,8 @@ pub struct TyGroup {
 
 impl Parse for TyGroup {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
         Ok(TyGroup {
@@ -216,9 +212,8 @@ pub struct TyArray {
 
 impl Parse for TyArray {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let (lsq_tok, mut contents, rsq_tok) = input.parse_between_sqs()?;
         let arr = TyArray {
             lsq_tok,
@@ -240,9 +235,8 @@ pub struct ArraySize {
 
 impl Parse for ArraySize {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(ArraySize {
             semicolon_tok: input.parse()?,
             size: input.parse()?,
@@ -265,9 +259,8 @@ pub struct TyPointer {
 
 impl Parse for TyPointer {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(TyPointer {
             star_tok: input.parse()?,
             mutability: input.parse()?,
@@ -286,9 +279,8 @@ pub struct TyReference {
 
 impl Parse for TyReference {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(TyReference {
             amp_tok: input.parse()?,
             lifetime: input.parse()?,
@@ -305,9 +297,8 @@ pub struct TyInfer {
 
 impl Parse for TyInfer {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(TyInfer {
             underscore_tok: input.parse()?,
         })
@@ -321,9 +312,8 @@ pub struct TyNever {
 
 impl Parse for TyNever {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(TyNever {
             bang_tok: input.parse()?,
         })
@@ -338,9 +328,8 @@ pub struct TyPath {
 
 impl Parse for TyPath {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let mut path = Punctuated::new();
 
         loop {
@@ -377,9 +366,8 @@ pub struct Generics {
 
 impl Parse for Generics {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let lt_tok = input.parse()?;
         let mut generics = Punctuated::new();
 
@@ -419,9 +407,8 @@ pub enum Generic {
 
 impl Parse for Generic {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         if input.peek::<tok::Lifetime>() {
             Ok(Generic::Lifetime(input.parse()?))
         } else {
@@ -441,9 +428,8 @@ pub struct TyFn {
 
 impl Parse for TyFn {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let fn_tok = input.parse()?;
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
@@ -465,9 +451,8 @@ pub struct TyDyn {
 
 impl Parse for TyDyn {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let dyn_tok = input.parse()?;
         let trait_tys;
 
@@ -517,9 +502,8 @@ impl TraitTy {
 
 impl Parse for TraitTy {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         if input.peek::<tok::CFn>() || input.peek::<tok::CFnMut>() || input.peek::<tok::CFnOnce>() {
             Ok(TraitTy::Fn(input.parse()?))
         } else {
@@ -536,9 +520,8 @@ pub struct TraitTyPath {
 
 impl Parse for TraitTyPath {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let mut path = Punctuated::new();
 
         loop {
@@ -575,9 +558,8 @@ pub struct TraitGenerics {
 
 impl Parse for TraitGenerics {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let lt_tok = input.parse()?;
         let mut generics = Punctuated::new();
 
@@ -635,9 +617,8 @@ pub enum TraitGeneric {
 
 impl Parse for TraitGeneric {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         if input.peek::<tok::Lifetime>() {
             Ok(TraitGeneric::Lifetime(input.parse()?))
         } else if input.peek::<tok::Ident>() && input.peek2::<tok::Eq>() {
@@ -657,9 +638,8 @@ pub struct Binding {
 
 impl Parse for Binding {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(Binding {
             ident: input.parse()?,
             eq_tok: input.parse()?,
@@ -688,9 +668,8 @@ pub struct TraitTyFn {
 
 impl Parse for TraitTyFn {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let fn_kind = input.parse()?;
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
@@ -723,9 +702,8 @@ impl FnKind {
 
 impl Parse for FnKind {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         if input.peek::<tok::CFn>() {
             Ok(FnKind::Fn(input.parse()?))
         } else if input.peek::<tok::CFnMut>() {

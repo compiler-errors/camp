@@ -17,23 +17,23 @@ use log::debug;
 use ast::{
     ImplItemDecl, ImplItemId, ItemDecl, ItemId, Mod, ModDecl, ModId, TraitItemDecl, TraitItemId,
 };
-pub use result::{AstError, AstResult};
+pub use result::{ParseError, ParseResult};
 
-#[salsa::query_group(AstStorage)]
-pub trait AstDb: camp_files::FilesDb {
-    fn parse_campsite(&self, id: CampsiteId) -> AstResult<Arc<Mod>>;
+#[salsa::query_group(ParseStorage)]
+pub trait ParseDb: camp_files::FilesDb {
+    fn parse_campsite(&self, id: CampsiteId) -> ParseResult<Arc<Mod>>;
 
     #[salsa::invoke(Mod::parse_mod_file)]
-    fn parse_mod_file(&self, id: ModId) -> AstResult<Arc<Mod>>;
+    fn parse_mod_file(&self, id: ModId) -> ParseResult<Arc<Mod>>;
 
     // ----- Internal plumbing ----- //
 
     #[salsa::interned]
     fn mod_decl(&self, decl: ModDecl) -> ModId;
 
-    fn mod_file(&self, id: ModId) -> AstResult<FileId>;
+    fn mod_file(&self, id: ModId) -> ParseResult<FileId>;
 
-    fn submod_directory(&self, id: ModId) -> AstResult<Utf8PathBuf>;
+    fn submod_directory(&self, id: ModId) -> ParseResult<Utf8PathBuf>;
 
     #[salsa::interned]
     fn item_decl(&self, decl: ItemDecl) -> ItemId;
@@ -45,12 +45,12 @@ pub trait AstDb: camp_files::FilesDb {
     fn impl_decl(&self, decl: ImplItemDecl) -> ImplItemId;
 }
 
-fn parse_campsite(db: &dyn AstDb, id: CampsiteId) -> AstResult<Arc<Mod>> {
+fn parse_campsite(db: &dyn ParseDb, id: CampsiteId) -> ParseResult<Arc<Mod>> {
     let id = db.mod_decl(ModDecl::CampsiteRoot(id));
     db.parse_mod_file(id)
 }
 
-fn mod_file(db: &dyn AstDb, id: ModId) -> AstResult<FileId> {
+fn mod_file(db: &dyn ParseDb, id: ModId) -> ParseResult<FileId> {
     match db.lookup_mod_decl(id) {
         ModDecl::CampsiteRoot(id) => Ok(db.campsite_root_file_id(id)?),
         ModDecl::Submod(decl) => {
@@ -67,7 +67,7 @@ fn mod_file(db: &dyn AstDb, id: ModId) -> AstResult<FileId> {
 
             if mod_file.is_file() {
                 if named_file.is_file() {
-                    Err(AstError::DuplicateModuleFile {
+                    Err(ParseError::DuplicateModuleFile {
                         span: decl.mod_token.span.until(decl.name.span),
                         mod_name: decl.name.ident.clone(),
                         file1: mod_file,
@@ -79,7 +79,7 @@ fn mod_file(db: &dyn AstDb, id: ModId) -> AstResult<FileId> {
             } else if named_file.is_file() {
                 Ok(db.file_id(named_file)?)
             } else {
-                Err(AstError::NoSuchModule {
+                Err(ParseError::NoSuchModule {
                     span: decl.mod_token.span.until(decl.name.span),
                     mod_name: decl.name.ident.clone(),
                     file1: mod_file,
@@ -90,7 +90,7 @@ fn mod_file(db: &dyn AstDb, id: ModId) -> AstResult<FileId> {
     }
 }
 
-fn submod_directory(db: &dyn AstDb, id: ModId) -> AstResult<Utf8PathBuf> {
+fn submod_directory(db: &dyn ParseDb, id: ModId) -> ParseResult<Utf8PathBuf> {
     match db.lookup_mod_decl(id) {
         ModDecl::CampsiteRoot(id) => {
             let path = db.campsite_root_file(id);
@@ -104,7 +104,7 @@ fn submod_directory(db: &dyn AstDb, id: ModId) -> AstResult<Utf8PathBuf> {
             if directory.is_dir() {
                 Ok(directory)
             } else {
-                Err(AstError::NotDirectory(directory))
+                Err(ParseError::NotDirectory(directory))
             }
         },
         ModDecl::Submod(decl) => {
@@ -117,7 +117,7 @@ fn submod_directory(db: &dyn AstDb, id: ModId) -> AstResult<Utf8PathBuf> {
             if directory.is_dir() {
                 Ok(directory)
             } else {
-                Err(AstError::NotDirectory(directory))
+                Err(ParseError::NotDirectory(directory))
             }
         },
     }

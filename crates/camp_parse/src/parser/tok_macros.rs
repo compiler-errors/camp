@@ -12,9 +12,8 @@ macro_rules! declare_identifiers {
 
             impl Parse for $name {
                 type Context = ();
-                type Error = AstError;
 
-                fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+                fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
                     util::parse_keyword::<$name>(input)
                 }
             }
@@ -45,9 +44,8 @@ macro_rules! declare_identifiers {
 
         impl Parse for $ident_name {
             type Context = ();
-            type Error = AstError;
 
-            fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+            fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
                 util::parse_ident(input)
             }
         }
@@ -83,9 +81,8 @@ macro_rules! declare_symbols {
 
             impl Parse for $name {
                 type Context = ();
-                type Error = AstError;
 
-                fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+                fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
                     util::parse_symbol(input, $symbol)
                 }
             }
@@ -171,9 +168,8 @@ macro_rules! literal_tok {
 
         impl Parse for $Ty {
             type Context = ();
-            type Error = AstError;
 
-            fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+            fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
                 if input.peek::<$Ty>() {
                     match input.bump_tok() {
                         Some(lex::Token::Literal(lex::TokenLiteral {
@@ -212,7 +208,7 @@ macro_rules! literal_tok {
 #[macro_export]
 macro_rules! generate_between_fn {
     ($name:ident, $kind:ident, $L:ident, $R:ident) => {
-        pub fn $name(&mut self) -> AstResult<($L, ParseBuffer<'p>, $R)> {
+        pub fn $name(&mut self) -> ParseResult<($L, ParseBuffer<'p>, $R)> {
             let left_tok = if let Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
                 delimiter: lex::TokenDelim::$kind,
                 span,

@@ -2,7 +2,7 @@ use camp_files::Span;
 use camp_lex::tok as lex;
 
 use crate::parser::{Parse, ParseBuffer, Peek};
-use crate::{AstError, AstResult};
+use crate::ParseResult;
 
 crate::declare_identifiers! {
     "pub" => Pub,
@@ -84,7 +84,7 @@ mod util {
         matches!(input.peek_tok(), Some(lex::Token::Ident(lex::TokenIdent { span: _, ident })) if !is_keyword(&ident))
     }
 
-    pub fn parse_ident(input: &mut ParseBuffer<'_>) -> AstResult<Ident> {
+    pub fn parse_ident(input: &mut ParseBuffer<'_>) -> ParseResult<Ident> {
         if input.peek::<Ident>() {
             match input.bump_tok() {
                 Some(lex::Token::Ident(lex::TokenIdent { span, ident })) => Ok(Ident {
@@ -102,7 +102,7 @@ mod util {
         matches!(input.peek_tok(), Some(lex::Token::Ident(lex::TokenIdent { span: _, ident })) if ident == keyword)
     }
 
-    pub fn parse_keyword<T: From<Span> + Peek>(input: &mut ParseBuffer<'_>) -> AstResult<T> {
+    pub fn parse_keyword<T: From<Span> + Peek>(input: &mut ParseBuffer<'_>) -> ParseResult<T> {
         if input.peek::<T>() {
             match input.bump_tok() {
                 Some(lex::Token::Ident(lex::TokenIdent { span, ident: _ })) => Ok(T::from(*span)),
@@ -135,7 +135,7 @@ mod util {
     pub fn parse_symbol<T: From<Span> + Peek>(
         input: &mut ParseBuffer<'_>,
         symbols: &'static str,
-    ) -> AstResult<T> {
+    ) -> ParseResult<T> {
         if input.peek::<T>() {
             let mut symbol_span = input.next_span();
 

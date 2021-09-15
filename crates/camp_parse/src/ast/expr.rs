@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::ast::{Generics, Pat, PathSegment, ReturnTy, Ty, TyElaborated};
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, AstError, AstResult};
+use crate::{tok, ParseError, ParseResult};
 
 #[derive(Copy, Clone)]
 pub struct ExprContext {
@@ -128,9 +128,8 @@ pub enum Expr {
 
 impl Parse for Expr {
     type Context = ExprContext;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Self> {
         let mut expr = Expr::initial(input, ctx)?;
 
         // the "block" expressions don't take trailing expressions
@@ -170,7 +169,7 @@ impl Parse for Expr {
 }
 
 impl Expr {
-    fn initial(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
+    fn initial(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
         Ok(if input.peek::<tok::Let>() {
             Expr::expr_let(input, ctx)?
         } else if UnaryOperator::should_parse(input) {
@@ -216,7 +215,7 @@ impl Expr {
         })
     }
 
-    fn expr_path(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_path(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
         let mut path = Punctuated::new();
         loop {
             path.push(input.parse()?);
@@ -241,7 +240,7 @@ impl Expr {
         }
     }
 
-    fn expr_elaborated(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_elaborated(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
         let ty = input.parse()?;
         let colon_colon_tok = input.parse()?;
         let mut path = Punctuated::new();
@@ -263,7 +262,7 @@ impl Expr {
         }))
     }
 
-    fn expr_lit(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_lit(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
         Ok(if input.peek::<tok::Number>() {
             Expr::Literal(ExprLiteral::Number(input.parse()?))
         } else {
@@ -271,7 +270,7 @@ impl Expr {
         })
     }
 
-    fn expr_group(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_group(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
         Ok(Expr::Group(ExprGroup {
@@ -281,7 +280,7 @@ impl Expr {
         }))
     }
 
-    fn expr_array(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_array(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
         let (lcurly_tok, contents, rcurly_tok) = input.parse_between_curlys()?;
 
         Ok(Expr::Array(ExprArray {
@@ -291,7 +290,7 @@ impl Expr {
         }))
     }
 
-    fn expr_break(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_break(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
         let break_tok = input.parse()?;
         let label = input.parse()?;
         let expr = if input.is_empty()
@@ -310,7 +309,7 @@ impl Expr {
         }))
     }
 
-    pub fn expr_block(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
+    pub fn expr_block(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
         let (lcurly_tok, mut contents, rcurly_tok) = input.parse_between_curlys()?;
         let mut stmts = vec![];
         let final_expr;
@@ -348,7 +347,7 @@ impl Expr {
         }))
     }
 
-    fn expr_return(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_return(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
         let return_tok = input.parse()?;
         let expr = if input.is_empty()
             || input.peek::<tok::Semicolon>()
@@ -362,14 +361,14 @@ impl Expr {
         Ok(Expr::Return(ExprReturn { return_tok, expr }))
     }
 
-    fn expr_continue(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_continue(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
         Ok(Expr::Continue(ExprContinue {
             continue_tok: input.parse()?,
             label: input.parse()?,
         }))
     }
 
-    fn expr_let(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_let(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
         let expr = Expr::Let(ExprLet {
             let_tok: input.parse()?,
             pat: input.parse()?,
@@ -381,11 +380,11 @@ impl Expr {
         if ctx.allow_let {
             Ok(expr)
         } else {
-            Err(AstError::DisallowLet(expr.span()))
+            Err(ParseError::DisallowLet(expr.span()))
         }
     }
 
-    fn expr_control_flow(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_control_flow(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
         let label = input.parse()?;
 
         if input.peek::<tok::Loop>() {
@@ -403,7 +402,7 @@ impl Expr {
         input: &mut ParseBuffer<'_>,
         ctx: ExprContext,
         label: Option<LoopLabel>,
-    ) -> AstResult<Expr> {
+    ) -> ParseResult<Expr> {
         Ok(Expr::Loop(ExprLoop {
             label,
             loop_tok: input.parse()?,
@@ -415,7 +414,7 @@ impl Expr {
         input: &mut ParseBuffer<'_>,
         ctx: ExprContext,
         label: Option<LoopLabel>,
-    ) -> AstResult<Expr> {
+    ) -> ParseResult<Expr> {
         Ok(Expr::While(ExprWhile {
             label,
             while_tok: input.parse()?,
@@ -428,7 +427,7 @@ impl Expr {
         input: &mut ParseBuffer<'_>,
         ctx: ExprContext,
         label: Option<LoopLabel>,
-    ) -> AstResult<Expr> {
+    ) -> ParseResult<Expr> {
         Ok(Expr::For(ExprFor {
             label,
             for_tok: input.parse()?,
@@ -439,7 +438,7 @@ impl Expr {
         }))
     }
 
-    fn expr_match(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_match(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
         let match_tok = input.parse()?;
         let expr = input.parse_with(ExprContext::any_expr_before_braces())?;
 
@@ -469,7 +468,7 @@ impl Expr {
         }))
     }
 
-    fn expr_if(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_if(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
         Ok(Expr::If(ExprIf {
             if_tok: input.parse()?,
             condition: input.parse_with(ExprContext::any_expr())?,
@@ -478,7 +477,7 @@ impl Expr {
         }))
     }
 
-    fn expr_unary(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_unary(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
         let op = input.parse()?;
 
         Ok(Expr::Unary(ExprUnary {
@@ -487,7 +486,7 @@ impl Expr {
         }))
     }
 
-    fn expr_closure(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
+    fn expr_closure(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
         let lpipe_tok = input.parse()?;
         let mut parameters = Punctuated::new();
         let rpipe_tok;
@@ -527,7 +526,7 @@ impl Expr {
         }))
     }
 
-    fn expr_range_trailing(input: &mut ParseBuffer<'_>, expr: Option<Expr>) -> AstResult<Expr> {
+    fn expr_range_trailing(input: &mut ParseBuffer<'_>, expr: Option<Expr>) -> ParseResult<Expr> {
         Ok(Expr::RangeTrailing(ExprRangeTrailing {
             expr: expr.map(Arc::new),
             dot_dot_dot_tok: input.parse()?,
@@ -538,7 +537,7 @@ impl Expr {
         input: &mut ParseBuffer<'_>,
         ctx: ExprContext,
         expr: Option<Expr>,
-    ) -> AstResult<Expr> {
+    ) -> ParseResult<Expr> {
         Ok(Expr::RangeInclusive(ExprRangeInclusive {
             left: expr.map(Arc::new),
             dot_dot_eq_tok: input.parse()?,
@@ -550,7 +549,7 @@ impl Expr {
         input: &mut ParseBuffer<'_>,
         ctx: ExprContext,
         expr: Option<Expr>,
-    ) -> AstResult<Expr> {
+    ) -> ParseResult<Expr> {
         Ok(Expr::Range(ExprRange {
             left: expr.map(Arc::new),
             dot_dot_tok: input.parse()?,
@@ -558,7 +557,7 @@ impl Expr {
         }))
     }
 
-    fn expr_access(input: &mut ParseBuffer<'_>, expr: Expr) -> AstResult<Expr> {
+    fn expr_access(input: &mut ParseBuffer<'_>, expr: Expr) -> ParseResult<Expr> {
         Ok(Expr::Access(ExprAccess {
             expr: Arc::new(expr),
             dot_tok: input.parse()?,
@@ -566,9 +565,9 @@ impl Expr {
         }))
     }
 
-    fn expr_call(input: &mut ParseBuffer<'_>, expr: Expr) -> AstResult<Expr> {
+    fn expr_call(input: &mut ParseBuffer<'_>, expr: Expr) -> ParseResult<Expr> {
         if !expr.is_callable() {
-            return Err(AstError::NotCallable(expr.span()));
+            return Err(ParseError::NotCallable(expr.span()));
         }
 
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
@@ -581,7 +580,7 @@ impl Expr {
         }))
     }
 
-    fn expr_index(input: &mut ParseBuffer<'_>, expr: Expr) -> AstResult<Expr> {
+    fn expr_index(input: &mut ParseBuffer<'_>, expr: Expr) -> ParseResult<Expr> {
         let (lsq_tok, mut contents, rsq_tok) = input.parse_between_sqs()?;
         let right = contents.parse_with(ExprContext::any_expr())?;
 
@@ -595,7 +594,7 @@ impl Expr {
         }))
     }
 
-    fn expr_cast(input: &mut ParseBuffer<'_>, expr: Expr) -> AstResult<Expr> {
+    fn expr_cast(input: &mut ParseBuffer<'_>, expr: Expr) -> ParseResult<Expr> {
         Ok(Expr::Cast(ExprCast {
             expr: Arc::new(expr),
             as_tok: input.parse()?,
@@ -761,9 +760,8 @@ pub struct TypeAnnotation {
 
 impl Parse for TypeAnnotation {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(TypeAnnotation {
             colon_tok: input.parse()?,
             ty: input.parse()?,
@@ -796,9 +794,8 @@ pub struct MatchArm {
 
 impl Parse for MatchArm {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(MatchArm {
             pat: input.parse()?,
             maybe_ty: input.parse()?,
@@ -830,9 +827,8 @@ pub struct Else {
 
 impl Parse for Else {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let else_tok = input.parse()?;
 
         let branch = Arc::new(if input.peek::<tok::If>() {
@@ -867,9 +863,8 @@ pub struct LoopLabel {
 
 impl Parse for LoopLabel {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(LoopLabel {
             lifetime: input.parse()?,
             colon_tok: input.parse()?,
@@ -915,9 +910,8 @@ pub enum AccessKind {
 
 impl Parse for AccessKind {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(if input.peek::<tok::Ident>() {
             AccessKind::Ident(input.parse()?, input.parse()?)
         } else if input.peek::<tok::Number>() {
@@ -936,9 +930,8 @@ pub struct AccessGenerics {
 
 impl Parse for AccessGenerics {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(AccessGenerics {
             colon_colon_tok: input.parse()?,
             generics: input.parse()?,
@@ -989,9 +982,8 @@ impl UnaryOperator {
 
 impl Parse for UnaryOperator {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         match UnaryOperator::peek(input) {
             // If we have `&mut`, peek consume two tokens
             Some(u @ UnaryOperator::RefMut) => {
@@ -1130,9 +1122,8 @@ impl BinaryOperator {
 
 impl Parse for BinaryOperator {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         if let Some(op) = BinaryOperator::peek(input) {
             for _ in 0..op.num_tokens() {
                 input.bump_tok().expect("Expect token");
@@ -1222,9 +1213,8 @@ pub struct ConstructorArg {
 
 impl Parse for ConstructorArg {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(ConstructorArg {
             ident: input.parse()?,
             expr: input.parse()?,
@@ -1240,9 +1230,8 @@ pub struct MemberExpr {
 
 impl Parse for MemberExpr {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(MemberExpr {
             colon_tok: input.parse()?,
             expr: input.parse_with(ExprContext::any_expr())?,
@@ -1273,9 +1262,8 @@ pub struct ClosureParameter {
 
 impl Parse for ClosureParameter {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(ClosureParameter {
             pat: input.parse()?,
             ty: input.parse()?,

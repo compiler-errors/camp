@@ -1,5 +1,5 @@
 use camp_files::FileId;
-use camp_parse::AstError;
+use camp_parse::ParseError;
 use codespan_derive::IntoDiagnostic;
 
 pub type DriverResult<T> = std::result::Result<T, DriverError>;
@@ -10,12 +10,12 @@ pub enum DriverError {
     #[message = "Unsupported compiler mode: {0}"]
     UnsupportedMode(&'static str),
 
-    #[render(AstError::into_diagnostic)]
-    AstError(AstError),
+    #[render(ParseError::into_diagnostic)]
+    ParseError(ParseError),
 }
 
-impl From<AstError> for DriverError {
-    fn from(e: AstError) -> Self {
-        DriverError::AstError(e)
+impl From<ParseError> for DriverError {
+    fn from(e: ParseError) -> Self {
+        DriverError::ParseError(e)
     }
 }

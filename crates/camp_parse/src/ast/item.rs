@@ -9,7 +9,7 @@ use crate::ast::{
     TraitTy, TraitTyPath, Ty, TyPath, Visibility,
 };
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, AstDb, AstError, AstResult};
+use crate::{tok, ParseDb, ParseError, ParseResult};
 
 id_type!(pub ModId);
 
@@ -29,9 +29,8 @@ pub struct SubmodDecl {
 
 impl Parse for SubmodDecl {
     type Context = ItemId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ItemId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ItemId) -> ParseResult<Self> {
         Ok(SubmodDecl {
             id: ctx,
             viz: input.parse()?,
@@ -51,7 +50,7 @@ pub struct Mod {
 }
 
 impl Mod {
-    pub fn parse_mod_file(db: &dyn AstDb, id: ModId) -> AstResult<Arc<Mod>> {
+    pub fn parse_mod_file(db: &dyn ParseDb, id: ModId) -> ParseResult<Arc<Mod>> {
         let file_id = db.mod_file(id)?;
 
         let contents = db.open_file(file_id)?;
@@ -67,9 +66,8 @@ impl Mod {
 
 impl Parse for Mod {
     type Context = ModId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ModId) -> Result<Self, Self::Error> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ModId) -> ParseResult<Self> {
         let mut items = vec![];
 
         while !input.is_empty() {
@@ -117,9 +115,8 @@ pub enum ModuleItem {
 
 impl Parse for ModuleItem {
     type Context = ItemId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ItemId) -> Result<Self, Self::Error> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ItemId) -> ParseResult<Self> {
         let mut lookahead = input.clone();
         let _viz: Visibility = lookahead.parse()?;
 
@@ -178,9 +175,8 @@ pub struct Extern {
 
 impl Parse for Extern {
     type Context = ExternId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ExternId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ExternId) -> ParseResult<Self> {
         Ok(Extern {
             id: ctx,
             viz: input.parse()?,
@@ -209,9 +205,8 @@ pub struct Use {
 
 impl Parse for Use {
     type Context = UseId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: UseId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: UseId) -> ParseResult<Self> {
         let viz = input.parse()?;
         let use_tok = input.parse()?;
         let mut path = Punctuated::new();
@@ -243,9 +238,8 @@ pub struct UseRename {
 
 impl Parse for UseRename {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(UseRename {
             as_tok: input.parse()?,
             ident: input.parse()?,
@@ -277,9 +271,8 @@ pub struct Struct {
 
 impl Parse for Struct {
     type Context = StructId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: StructId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: StructId) -> ParseResult<Self> {
         let viz = input.parse()?;
         let struct_tok = input.parse()?;
         let ident = input.parse()?;
@@ -292,7 +285,7 @@ impl Parse for Struct {
             Fields::None => (where_clause, Some(input.parse()?)),
             Fields::Positional(_) => {
                 if let Some(where_clause) = where_clause {
-                    return Err(AstError::ImproperWhere(where_clause.where_tok.span));
+                    return Err(ParseError::ImproperWhere(where_clause.where_tok.span));
                 }
                 // Parse optional trailing where clause and semicolon token
                 (input.parse()?, Some(input.parse()?))
@@ -324,9 +317,8 @@ pub enum Fields {
 
 impl Parse for Fields {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(if input.peek::<tok::LCurly>() {
             Fields::Named(input.parse()?)
         } else if input.peek::<tok::LParen>() {
@@ -346,9 +338,8 @@ pub struct FieldsNamed {
 
 impl Parse for FieldsNamed {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let (lcurly_tok, contents, rcurly_tok) = input.parse_between_curlys()?;
 
         Ok(FieldsNamed {
@@ -369,9 +360,8 @@ pub struct FieldNamed {
 
 impl Parse for FieldNamed {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(FieldNamed {
             viz: input.parse()?,
             ident: input.parse()?,
@@ -390,9 +380,8 @@ pub struct FieldsPositional {
 
 impl Parse for FieldsPositional {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
         Ok(FieldsPositional {
@@ -411,9 +400,8 @@ pub struct FieldPositional {
 
 impl Parse for FieldPositional {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(FieldPositional {
             viz: input.parse()?,
             ty: input.parse()?,
@@ -429,9 +417,8 @@ pub struct WhereClause {
 
 impl Parse for WhereClause {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let where_tok = input.parse()?;
         let mut restrictions = Punctuated::new();
 
@@ -470,9 +457,8 @@ pub struct TypeRestriction {
 
 impl Parse for TypeRestriction {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(TypeRestriction {
             ty: input.parse()?,
             trailing_traits: input.parse()?,
@@ -499,9 +485,8 @@ pub struct Enum {
 
 impl Parse for Enum {
     type Context = EnumId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: EnumId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: EnumId) -> ParseResult<Self> {
         let viz = input.parse()?;
         let enum_tok = input.parse()?;
         let ident = input.parse()?;
@@ -532,9 +517,8 @@ pub struct EnumVariant {
 
 impl Parse for EnumVariant {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(EnumVariant {
             ident: input.parse()?,
             fields: input.parse()?,
@@ -555,9 +539,8 @@ pub struct Fun {
 
 impl Parse for Fun {
     type Context = FnId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: FnId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: FnId) -> ParseResult<Self> {
         Ok(Fun {
             id: ctx,
             sig: input.parse()?,
@@ -581,9 +564,8 @@ pub struct Signature {
 
 impl Parse for Signature {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         let viz = input.parse()?;
         let fn_tok = input.parse()?;
         let ident = input.parse()?;
@@ -614,9 +596,8 @@ pub struct Parameter {
 
 impl Parse for Parameter {
     type Context = ();
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(Parameter {
             pat: input.parse()?,
             colon_tok: input.parse()?,
@@ -645,9 +626,8 @@ pub struct Trait {
 
 impl Parse for Trait {
     type Context = TraitId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: TraitId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: TraitId) -> ParseResult<Self> {
         let viz = input.parse()?;
         let fn_tok = input.parse()?;
         let ident = input.parse()?;
@@ -704,9 +684,8 @@ pub enum TraitItem {
 
 impl Parse for TraitItem {
     type Context = TraitItemId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: TraitItemId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: TraitItemId) -> ParseResult<Self> {
         Visibility::do_not_expect(input)?;
 
         Ok(if input.peek::<tok::Fn>() {
@@ -732,9 +711,8 @@ pub struct TraitFn {
 
 impl Parse for TraitFn {
     type Context = TraitFnId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: TraitFnId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: TraitFnId) -> ParseResult<Self> {
         Ok(TraitFn {
             id: ctx,
             signature: input.parse()?,
@@ -758,9 +736,8 @@ pub struct TraitType {
 
 impl Parse for TraitType {
     type Context = TraitTypeId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: TraitTypeId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: TraitTypeId) -> ParseResult<Self> {
         Ok(TraitType {
             id: ctx,
             type_tok: input.parse()?,
@@ -789,9 +766,8 @@ pub struct Impl {
 
 impl Parse for Impl {
     type Context = ImplId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ImplId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ImplId) -> ParseResult<Self> {
         Visibility::do_not_expect(input)?;
 
         let impl_tok = input.parse()?;
@@ -814,7 +790,7 @@ impl Parse for Impl {
                     });
                     ty = input.parse()?;
                 },
-                ty => return Err(AstError::NotATrait(ty.span())),
+                ty => return Err(ParseError::NotATrait(ty.span())),
             }
         } else {
             impl_trait = None;
@@ -874,9 +850,8 @@ pub enum ImplItem {
 
 impl Parse for ImplItem {
     type Context = ImplItemId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ImplItemId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ImplItemId) -> ParseResult<Self> {
         let mut lookahead = input.clone();
         let _viz: Visibility = lookahead.parse()?;
 
@@ -903,9 +878,8 @@ pub struct ImplFn {
 
 impl Parse for ImplFn {
     type Context = ImplFnId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ImplFnId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ImplFnId) -> ParseResult<Self> {
         Ok(ImplFn {
             id: ctx,
             signature: input.parse()?,
@@ -930,9 +904,8 @@ pub struct ImplType {
 
 impl Parse for ImplType {
     type Context = ImplTypeId;
-    type Error = AstError;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ImplTypeId) -> AstResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ImplTypeId) -> ParseResult<Self> {
         Ok(ImplType {
             id: ctx,
             type_tok: input.parse()?,
