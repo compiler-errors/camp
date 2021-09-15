@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 use camp_files::{CampsiteId, FileId};
+use log::debug;
 
 use ast::{
     ImplItemDecl, ImplItemId, ItemDecl, ItemId, Mod, ModDecl, ModId, TraitItemDecl, TraitItemId,
@@ -58,9 +59,10 @@ fn mod_file(db: &dyn AstDb, id: ModId) -> AstResult<FileId> {
 
             let mut mod_file = parent_directory.clone();
             mod_file.push(&decl.name.ident);
-            mod_file.set_extension("camp");
+            mod_file.push("mod.camp");
 
             let mut named_file = parent_directory;
+            named_file.push(&decl.name.ident);
             named_file.set_extension("camp");
 
             if mod_file.is_file() {
@@ -96,6 +98,8 @@ fn submod_directory(db: &dyn AstDb, id: ModId) -> AstResult<Utf8PathBuf> {
                 .parent()
                 .expect("Canonical files must have a parent")
                 .to_owned();
+
+            debug!("submod directory for {:?} is {}", id, directory);
 
             if directory.is_dir() {
                 Ok(directory)

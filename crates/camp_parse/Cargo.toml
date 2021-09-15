@@ -12,6 +12,7 @@ camp_lex = { path = "../camp_lex" }
 camp_util = { path = "../camp_util" }
 codespan-derive = "0.1.1"
 derivative = "2.2.0"
+log = "0.4.14"
 salsa = "0.16.1"
 
 [features]

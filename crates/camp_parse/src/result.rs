@@ -26,7 +26,8 @@ pub enum AstError {
     FileError(FileError),
     #[message = "Path does not exist or is not a directory: {0}"]
     NotDirectory(Utf8PathBuf),
-    #[message = "Module {mod_name} is declared in two different files: {file1} and {file2}"]
+    #[message = "Module {mod_name} is defined by two different files"]
+    #[note = "Both {file1} and {file2} exist"]
     DuplicateModuleFile {
         #[primary = "Module declared here"]
         span: Span,
@@ -34,7 +35,8 @@ pub enum AstError {
         file1: Utf8PathBuf,
         file2: Utf8PathBuf,
     },
-    #[message = "File cannot be found for module {mod_name}, neither {file1} not {file2} exists"]
+    #[message = "File cannot be found for module {mod_name}"]
+    #[note = "Neither {file1} nor {file2} exist"]
     NoSuchModule {
         #[primary = "Module declared here"]
         span: Span,

@@ -1,0 +1,6 @@
+error: Module a is declared in two different files: $DIR/duplicate/a/mod.camp and $DIR/duplicate/a.camp
+  ┌─ $DIR/duplicate.camp:2:5
+  │
+2 │     mod a;
+  │     ^^^^^ Module declared here
+

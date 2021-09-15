@@ -1,0 +1,32 @@
+Mod {
+    items: [
+        Mod {
+            items: [
+                Fun {
+                    sig: Signature {
+                        viz: Private,
+                        fn_tok: Fn,
+                        ident: Ident {
+                            ident: "foo",
+                        },
+                        generics: None,
+                        where_clause: None,
+                        lparen_tok: LParen,
+                        parameters: Punctuated {
+                            items: [],
+                            last: None,
+                        },
+                        rparen_tok: RParen,
+                        return_ty: None,
+                    },
+                    body: ExprBlock {
+                        lcurly_tok: LCurly,
+                        stmts: [],
+                        final_expr: None,
+                        rcurly_tok: RCurly,
+                    },
+                },
+            ],
+        },
+    ],
+}

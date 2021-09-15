@@ -2,7 +2,6 @@ use camino::Utf8PathBuf;
 use camp_driver::{parse_stage, CampDb, CampsiteDecl, DriverError};
 use codespan_derive::IntoDiagnostic;
 use log::LevelFilter;
-use simple_logger::SimpleLogger;
 use structopt::StructOpt;
 use termcolor::{ColorChoice, StandardStream};
 
@@ -82,7 +81,7 @@ fn main() {
     let args = Args::from_args();
 
     // Set up logging with the declared verbosity (see `crate::log_level`)
-    SimpleLogger::new().with_level(args.verbose).init().unwrap();
+    env_logger::init();
 
     let mut db = CampDb::default();
 
