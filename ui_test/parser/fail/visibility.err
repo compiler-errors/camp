@@ -1,0 +1,6 @@
+error: Expected `mod`, `super`, or `site`
+  ┌─ $DIR/visibility.camp:1:5
+  │
+1 │ pub(pub site) fn foo() {}
+  │     ^^^
+

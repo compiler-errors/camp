@@ -1,0 +1,6 @@
+error: Visiblity attribute not expected here
+  ┌─ $DIR/impl_viz.camp:1:1
+  │
+1 │ pub impl Foo {}
+  │ ^^^
+

@@ -1,0 +1,3 @@
+pub(site) fn foo() {}
+
+pub fn foo() {}

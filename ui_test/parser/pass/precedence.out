@@ -1,13 +1,6 @@
 Mod {
-    id: ModId(
-        0,
-    ),
-    mod_decl: None,
     items: [
         Fun {
-            id: FnId(
-                0,
-            ),
             sig: Signature {
                 viz: Private,
                 fn_tok: Fn,

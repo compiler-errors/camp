@@ -1,0 +1,31 @@
+Mod {
+    items: [
+        Extern {
+            viz: Private,
+            extern_tok: Extern,
+            site_tok: Site,
+            name: Ident {
+                ident: "std",
+            },
+            rename: None,
+            semi_tok: Semicolon,
+        },
+        Extern {
+            viz: Private,
+            extern_tok: Extern,
+            site_tok: Site,
+            name: Ident {
+                ident: "std",
+            },
+            rename: Some(
+                UseRename {
+                    as_tok: As,
+                    ident: Ident {
+                        ident: "camp_std",
+                    },
+                },
+            ),
+            semi_tok: Semicolon,
+        },
+    ],
+}

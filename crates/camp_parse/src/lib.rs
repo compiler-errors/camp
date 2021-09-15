@@ -1,178 +1,120 @@
 #![feature(never_type)]
 
+pub mod ast;
+mod parser;
 mod result;
-mod punctuated;
+pub mod tok;
 
-use camp_diagnostic::{err, Result};
-use camp_lex::{tok::Token as LexToken, TokenBuffer};
-use camp_files::Span;
+#[cfg(test)]
+mod ui_test;
 
-use result::ParseError;
-pub use punctuated::Punctuated;
+use std::sync::Arc;
 
-#[derive(Clone)]
-pub struct ParseContext<'token> {
-    pub tokens: &'token [LexToken],
-    expected: Vec<&'static str>,
-    last_span: Span,
+use camino::Utf8PathBuf;
+use camp_files::{CampsiteId, FileId};
+
+use ast::{
+    ImplItemDecl, ImplItemId, ItemDecl, ItemId, Mod, ModDecl, ModId, TraitItemDecl, TraitItemId,
+};
+pub use result::{AstError, AstResult};
+
+#[salsa::query_group(AstStorage)]
+pub trait AstDb: camp_files::FilesDb {
+    fn parse_campsite(&self, id: CampsiteId) -> AstResult<Arc<Mod>>;
+
+    #[salsa::invoke(Mod::parse_mod_file)]
+    fn parse_mod_file(&self, id: ModId) -> AstResult<Arc<Mod>>;
+
+    // ----- Internal plumbing ----- //
+
+    #[salsa::interned]
+    fn mod_decl(&self, decl: ModDecl) -> ModId;
+
+    fn mod_file(&self, id: ModId) -> AstResult<FileId>;
+
+    fn submod_directory(&self, id: ModId) -> AstResult<Utf8PathBuf>;
+
+    #[salsa::interned]
+    fn item_decl(&self, decl: ItemDecl) -> ItemId;
+
+    #[salsa::interned]
+    fn trait_decl(&self, decl: TraitItemDecl) -> TraitItemId;
+
+    #[salsa::interned]
+    fn impl_decl(&self, decl: ImplItemDecl) -> ImplItemId;
 }
 
-impl<'token> ParseContext<'token> {
-    pub fn new(buf: &'token TokenBuffer) -> ParseContext<'token> {
-        ParseContext {
-            tokens: buf.tokens.as_slice(),
-            expected: vec![],
-            last_span: buf.last_span,
-        }
-    }
+fn parse_campsite(db: &dyn AstDb, id: CampsiteId) -> AstResult<Arc<Mod>> {
+    let id = db.mod_decl(ModDecl::CampsiteRoot(id));
+    db.parse_mod_file(id)
+}
 
-    pub fn new_from_parts(tokens: &'token [LexToken], last_span: Span) -> ParseContext<'token> {
-        ParseContext {
-            tokens,
-            expected: vec![],
-            last_span,
-        }
-    }
+fn mod_file(db: &dyn AstDb, id: ModId) -> AstResult<FileId> {
+    match db.lookup_mod_decl(id) {
+        ModDecl::CampsiteRoot(id) => Ok(db.campsite_root_file_id(id)?),
+        ModDecl::Submod(decl) => {
+            let parent_mod_id = db.lookup_item_decl(decl.id).mod_id;
+            let parent_directory = db.submod_directory(parent_mod_id)?;
 
-    pub fn peek_tok(&self) -> Option<&'token LexToken> {
-        self.tokens.first()
-    }
+            let mut mod_file = parent_directory.clone();
+            mod_file.push(&decl.name.ident);
+            mod_file.set_extension("camp");
 
-    pub fn peek_tok_n(&self, idx: usize) -> Option<&'token LexToken> {
-        self.tokens.get(idx)
-    }
+            let mut named_file = parent_directory;
+            named_file.set_extension("camp");
 
-    pub fn next_span(&self) -> Span {
-        self.peek_tok().map_or(self.last_span, LexToken::span)
-    }
-
-    pub fn bump_tok(&mut self) -> Option<&'token LexToken> {
-        if let Some((first, rest)) = self.tokens.split_first() {
-            self.expected.clear();
-            self.tokens = rest;
-            Some(first)
-        } else {
-            None
-        }
-    }
-
-    pub fn peek<T: Peek>(&mut self) -> bool {
-        self.also_expect::<T>();
-        T::peek(self)
-    }
-
-    pub fn peek2<T: Peek>(&self) -> bool {
-        // Make a lookahead parse context, moved forward one token.
-        let lookahead = ParseContext {
-            tokens: self.tokens.split_first().map_or(&[], |(_, rest)| rest),
-            expected: vec![],
-            last_span: self.last_span,
-        };
-        T::peek(&lookahead)
-    }
-
-    pub fn parse<T: Parse>(&mut self) -> Result<T> {
-        T::parse(self)
-    }
-
-    pub fn parse_punctuated<T: Parse, S: Parse, EndTok: Peek>(
-        mut self,
-        _end_tok: EndTok,
-    ) -> Result<Punctuated<T, S>> {
-        let mut ret = Punctuated::new();
-
-        loop {
-            if self.peek_tok().is_none() {
-                break;
-            }
-
-            self.also_expect::<EndTok>();
-            ret.push(self.parse()?);
-
-            if self.peek_tok().is_none() {
-                break;
-            }
-
-            self.also_expect::<EndTok>();
-            ret.push_punct(self.parse()?);
-        }
-
-        Ok(ret)
-    }
-
-    pub fn expect_empty<EndTok: Peek>(mut self, _end_tok: EndTok) -> Result<()> {
-        if self.peek_tok().is_some() {
-            self.also_expect::<EndTok>();
-            self.error_exhausted()?;
-        } else {
-            Ok(())
-        }
-    }
-
-    pub fn error_exhausted(&mut self) -> Result<!> {
-        let mut expected = String::new();
-
-        for (i, tok) in self.expected.iter().enumerate() {
-            if i == self.expected.len() - 1 {
-                if i > 1 {
-                    expected.push_str(", or ");
-                } else if i == 1 {
-                    expected.push_str(" or ");
+            if mod_file.is_file() {
+                if named_file.is_file() {
+                    Err(AstError::DuplicateModuleFile {
+                        span: decl.mod_token.span.until(decl.name.span),
+                        mod_name: decl.name.ident.clone(),
+                        file1: mod_file,
+                        file2: named_file,
+                    })
+                } else {
+                    Ok(db.file_id(mod_file)?)
                 }
-            } else if i > 0 {
-                expected.push_str(", ");
+            } else if named_file.is_file() {
+                Ok(db.file_id(named_file)?)
+            } else {
+                Err(AstError::NoSuchModule {
+                    span: decl.mod_token.span.until(decl.name.span),
+                    mod_name: decl.name.ident.clone(),
+                    file1: mod_file,
+                    file2: named_file,
+                })
             }
-
-            expected.push_str(*tok);
-        }
-
-        err!(ParseError::ExpectedTokens(self.next_span(), expected))
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.tokens.is_empty()
-    }
-
-    pub fn also_expect<T: Peek>(&mut self) {
-        let name = T::name();
-        if !self.expected.contains(&name) {
-            self.expected.push(name);
-        }
+        },
     }
 }
 
-pub trait Parse: Sized {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self>;
-}
+fn submod_directory(db: &dyn AstDb, id: ModId) -> AstResult<Utf8PathBuf> {
+    match db.lookup_mod_decl(id) {
+        ModDecl::CampsiteRoot(id) => {
+            let path = db.campsite_root_file(id);
+            let directory = path
+                .parent()
+                .expect("Canonical files must have a parent")
+                .to_owned();
 
-impl<T: Parse> Parse for Box<T> {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
-        input.parse().map(Box::new)
+            if directory.is_dir() {
+                Ok(directory)
+            } else {
+                Err(AstError::NotDirectory(directory))
+            }
+        },
+        ModDecl::Submod(decl) => {
+            let parent_mod_id = db.lookup_item_decl(decl.id).mod_id;
+
+            // Append our module name to the parent directory
+            let mut directory = db.submod_directory(parent_mod_id)?;
+            directory.push(&decl.name.ident);
+
+            if directory.is_dir() {
+                Ok(directory)
+            } else {
+                Err(AstError::NotDirectory(directory))
+            }
+        },
     }
-}
-
-pub trait ShouldParse: Sized + Parse {
-    fn should_parse(input: &mut ParseContext<'_>) -> bool;
-}
-
-impl<T: Peek + Parse> ShouldParse for T {
-    fn should_parse(input: &mut ParseContext<'_>) -> bool {
-        T::peek(input)
-    }
-}
-
-impl<T: ShouldParse> Parse for Option<T> {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
-        if T::should_parse(input) {
-            Ok(Some(T::parse(input)?))
-        } else {
-            Ok(None)
-        }
-    }
-}
-
-pub trait Peek: Sized {
-    fn peek(input: &ParseContext<'_>) -> bool;
-
-    fn name() -> &'static str;
 }

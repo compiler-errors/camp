@@ -1,25 +1,18 @@
-/// Generates an newtype wrapper around a usize
+/// Generates an newtype wrapper around a u32
 #[macro_export]
 macro_rules! id_type {
-    ($visibility: vis $name: ident) => {
+    ($vis:vis $name:ident) => {
         #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-        $visibility struct $name(pub usize);
+        $vis struct $name(pub u32);
 
         impl $name {
-            pub fn new() -> Self {
-                static INCR: std::sync::atomic::AtomicUsize =
-                    std::sync::atomic::AtomicUsize::new(0);
-
-                Self(INCR.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
-            }
-
             pub fn fake() -> Self {
                 Self(0)
             }
         }
 
-        impl From<usize> for $name {
-            fn from(id: usize) -> Self {
+        impl From<u32> for $name {
+            fn from(id: u32) -> Self {
                 Self(id)
             }
         }
@@ -27,6 +20,36 @@ macro_rules! id_type {
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, "{}({})", stringify!($name), self.0)
+            }
+        }
+
+        impl salsa::InternKey for $name {
+            fn from_intern_id(v: salsa::InternId) -> Self {
+                $name::from(v.as_u32())
+            }
+
+            fn as_intern_id(&self) -> salsa::InternId {
+                salsa::InternId::from(self.0)
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! wrapper_id_type {
+    ($vis:vis $name:ident => $wrapped:ty) => {
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+        $vis struct $name(pub $wrapped);
+
+        impl From<$wrapped> for $name {
+            fn from(id: $wrapped) -> Self {
+                Self(id)
+            }
+        }
+
+        impl Into<$wrapped> for $name {
+            fn into(self) -> $wrapped {
+                self.0
             }
         }
     };

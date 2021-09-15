@@ -1,4 +1,7 @@
-use std::{convert::TryInto, io::Write, process::Command, sync::Mutex};
+use std::convert::TryInto;
+use std::io::Write;
+use std::process::Command;
+use std::sync::Mutex;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use lazy_static::lazy_static;
@@ -105,7 +108,7 @@ pub fn cargo_run(args: &[&str]) -> Result<(bool, String, String)> {
     let output = Command::new("cargo")
         .arg("run")
         .arg("--quiet")
-        .arg("--features=camp_ast/ignore_spans")
+        .arg("--features=camp_parse/ignore_ids")
         .arg("--")
         .arg("--no-color")
         .args(args)

@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub struct Punctuated<T, S> {
     items: Vec<(T, S)>,
     last: Option<Box<T>>,
@@ -63,11 +63,17 @@ impl<T, S> Punctuated<T, S> {
             .or_else(|| self.items.last().map(|(t, _)| t))
     }
 
-    pub fn items(&self) -> impl Iterator<Item = &'_ T> {
-        self.items.iter().map(|(t, _)| t).chain(self.last.iter().map(|t| t.as_ref()))
+    pub fn iter_items(&self) -> impl Iterator<Item = &'_ T> {
+        self.items
+            .iter()
+            .map(|(t, _)| t)
+            .chain(self.last.iter().map(|t| t.as_ref()))
     }
 
     pub fn into_items(self) -> impl Iterator<Item = T> {
-        self.items.into_iter().map(|(t, _)| t).chain(self.last.map(|t| *t))
+        self.items
+            .into_iter()
+            .map(|(t, _)| t)
+            .chain(self.last.map(|t| *t))
     }
 }

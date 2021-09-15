@@ -1,17 +1,57 @@
-use camp_diagnostic::{bail, err, Result};
-use camp_parse::{Parse, ParseContext, Punctuated, ShouldParse};
 use camp_files::Span;
 use derivative::Derivative;
+use std::sync::Arc;
 
-use crate::{
-    result::AstError,
-    misc::{PathSegment, ReturnTy},
-    pat::Pat,
-    tok,
-    tok::ParseBetween,
-    ty::{Generics, Ty, TyElaborated},
-};
+use crate::ast::{Generics, Pat, PathSegment, ReturnTy, Ty, TyElaborated};
+use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
+use crate::{tok, AstError, AstResult};
 
+#[derive(Copy, Clone)]
+pub struct ExprContext {
+    consume_braces: bool,
+    allow_let: bool,
+    prec: Prec,
+}
+
+impl ExprContext {
+    pub fn any_expr() -> ExprContext {
+        ExprContext {
+            consume_braces: true,
+            allow_let: false,
+            prec: Prec::Lowest,
+        }
+    }
+
+    fn any_expr_before_braces() -> ExprContext {
+        ExprContext {
+            consume_braces: false,
+            allow_let: false,
+            prec: Prec::Lowest,
+        }
+    }
+
+    fn any_stmt() -> ExprContext {
+        ExprContext {
+            consume_braces: true,
+            allow_let: true,
+            prec: Prec::Lowest,
+        }
+    }
+
+    fn subexpr_with_prec(self, prec: Prec) -> ExprContext {
+        ExprContext {
+            prec,
+            allow_let: false,
+            ..self
+        }
+    }
+
+    fn any_subexpr(self) -> ExprContext {
+        self.subexpr_with_prec(Prec::Lowest)
+    }
+}
+
+#[derive(Copy, Clone)]
 #[repr(usize)]
 enum Prec {
     Lowest = 0,
@@ -29,7 +69,7 @@ enum Prec {
     Call = 12,
 }
 
-#[derive(Derivative)]
+#[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]
 pub enum Expr {
     #[derivative(Debug = "transparent")]
@@ -87,43 +127,31 @@ pub enum Expr {
 }
 
 impl Parse for Expr {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
-        Expr::any(input, true, false)
-    }
-}
+    type Context = ExprContext;
+    type Error = AstError;
 
-impl Expr {
-    fn any(input: &mut ParseContext<'_>, consume_braces: bool, allow_let: bool) -> Result<Expr> {
-        Expr::with_prec(input, Prec::Lowest as _, consume_braces, allow_let)
-    }
-
-    fn with_prec(
-        input: &mut ParseContext<'_>,
-        prec: usize,
-        consume_braces: bool,
-        allow_let: bool,
-    ) -> Result<Expr> {
-        let mut expr = Expr::initial(input, consume_braces, allow_let)?;
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Self> {
+        let mut expr = Expr::initial(input, ctx)?;
 
         // the "block" expressions don't take trailing expressions
         if !expr.needs_semicolon() {
             return Ok(expr);
         }
 
-        while Expr::should_continue(input, prec) {
+        while Expr::should_continue(input, ctx.prec) {
             if BinaryOperator::should_parse(input) {
                 let op = input.parse()?;
                 expr = Expr::Binary(ExprBinary {
-                    left: Box::new(expr),
+                    left: Arc::new(expr),
                     op,
-                    right: Box::new(Expr::with_prec(input, op.prec_of(), consume_braces, false)?),
+                    right: input.parse_with(ctx.subexpr_with_prec(op.prec_of()))?,
                 });
             } else if input.peek::<tok::DotDotDot>() {
                 expr = Expr::expr_range_trailing(input, Some(expr))?;
             } else if input.peek::<tok::DotDotEq>() {
-                expr = Expr::expr_range_inclusive(input, Some(expr), consume_braces)?;
+                expr = Expr::expr_range_inclusive(input, ctx, Some(expr))?;
             } else if input.peek::<tok::DotDot>() {
-                expr = Expr::expr_range(input, Some(expr), consume_braces)?;
+                expr = Expr::expr_range(input, ctx, Some(expr))?;
             } else if input.peek::<tok::Dot>() {
                 expr = Expr::expr_access(input, expr)?;
             } else if input.peek::<tok::LParen>() {
@@ -139,58 +167,56 @@ impl Expr {
 
         Ok(expr)
     }
+}
 
-    fn initial(
-        input: &mut ParseContext<'_>,
-        consume_braces: bool,
-        allow_let: bool,
-    ) -> Result<Expr> {
+impl Expr {
+    fn initial(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
         Ok(if input.peek::<tok::Let>() {
-            Expr::expr_let(input, consume_braces, allow_let)?
+            Expr::expr_let(input, ctx)?
         } else if UnaryOperator::should_parse(input) {
-            Expr::expr_unary(input, consume_braces)?
+            Expr::expr_unary(input, ctx)?
         } else if input.peek::<tok::DotDotDot>() {
             Expr::expr_range_trailing(input, None)?
         } else if input.peek::<tok::DotDotEq>() {
-            Expr::expr_range_inclusive(input, None, consume_braces)?
+            Expr::expr_range_inclusive(input, ctx, None)?
         } else if input.peek::<tok::DotDot>() {
-            Expr::expr_range(input, None, consume_braces)?
+            Expr::expr_range(input, ctx, None)?
         } else if input.peek::<tok::Lifetime>()
             || input.peek::<tok::Loop>()
             || input.peek::<tok::While>()
             || input.peek::<tok::For>()
         {
-            Expr::expr_control_flow(input)?
+            Expr::expr_control_flow(input, ctx)?
         } else if input.peek::<tok::LCurly>() {
-            Expr::expr_block(input)?
-        } else if input.peek::<tok::Ident>() || input.peek::<tok::Root>() {
-            Expr::expr_path(input, consume_braces)?
+            Expr::expr_block(input, ctx)?
+        } else if input.peek::<tok::Ident>() || input.peek::<tok::Site>() {
+            Expr::expr_path(input, ctx)?
         } else if input.peek::<tok::Lt>() {
-            Expr::expr_elaborated(input)?
+            Expr::expr_elaborated(input, ctx)?
         } else if input.peek::<tok::Number>() {
-            Expr::expr_lit(input)?
+            Expr::expr_lit(input, ctx)?
         } else if input.peek::<tok::LParen>() {
-            Expr::expr_group(input)?
+            Expr::expr_group(input, ctx)?
         } else if input.peek::<tok::LSq>() {
-            Expr::expr_array(input)?
+            Expr::expr_array(input, ctx)?
         } else if input.peek::<tok::Match>() {
-            Expr::expr_match(input)?
+            Expr::expr_match(input, ctx)?
         } else if input.peek::<tok::If>() {
-            Expr::expr_if(input)?
+            Expr::expr_if(input, ctx)?
         } else if input.peek::<tok::Break>() {
-            Expr::expr_break(input, consume_braces)?
+            Expr::expr_break(input, ctx)?
         } else if input.peek::<tok::Continue>() {
-            Expr::expr_continue(input)?
+            Expr::expr_continue(input, ctx)?
         } else if input.peek::<tok::Return>() {
-            Expr::expr_return(input, consume_braces)?
+            Expr::expr_return(input, ctx)?
         } else if input.peek::<tok::Pipe>() {
-            Expr::expr_closure(input, consume_braces)?
+            Expr::expr_closure(input, ctx)?
         } else {
             input.error_exhausted()?;
         })
     }
 
-    fn expr_path(input: &mut ParseContext<'_>, consume_braces: bool) -> Result<Expr> {
+    fn expr_path(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
         let mut path = Punctuated::new();
         loop {
             path.push(input.parse()?);
@@ -202,7 +228,7 @@ impl Expr {
             }
         }
 
-        if consume_braces && input.peek::<tok::LCurly>() {
+        if ctx.consume_braces && input.peek::<tok::LCurly>() {
             let (lcurly_tok, contents, rcurly_tok) = input.parse_between_curlys()?;
             Ok(Expr::Constructor(ExprConstructor {
                 path,
@@ -215,7 +241,7 @@ impl Expr {
         }
     }
 
-    fn expr_elaborated(input: &mut ParseContext<'_>) -> Result<Expr> {
+    fn expr_elaborated(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
         let ty = input.parse()?;
         let colon_colon_tok = input.parse()?;
         let mut path = Punctuated::new();
@@ -237,7 +263,7 @@ impl Expr {
         }))
     }
 
-    fn expr_lit(input: &mut ParseContext<'_>) -> Result<Expr> {
+    fn expr_lit(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
         Ok(if input.peek::<tok::Number>() {
             Expr::Literal(ExprLiteral::Number(input.parse()?))
         } else {
@@ -245,36 +271,36 @@ impl Expr {
         })
     }
 
-    fn expr_group(input: &mut ParseContext<'_>) -> Result<Expr> {
+    fn expr_group(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
         Ok(Expr::Group(ExprGroup {
             lparen_tok,
-            exprs: contents.parse_punctuated(rparen_tok)?,
+            exprs: contents.parse_punctuated_with(ExprContext::any_expr(), rparen_tok)?,
             rparen_tok,
         }))
     }
 
-    fn expr_array(input: &mut ParseContext<'_>) -> Result<Expr> {
+    fn expr_array(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
         let (lcurly_tok, contents, rcurly_tok) = input.parse_between_curlys()?;
 
         Ok(Expr::Array(ExprArray {
             lcurly_tok,
-            exprs: contents.parse_punctuated(rcurly_tok)?,
+            exprs: contents.parse_punctuated_with(ExprContext::any_expr(), rcurly_tok)?,
             rcurly_tok,
         }))
     }
 
-    fn expr_break(input: &mut ParseContext<'_>, consume_braces: bool) -> Result<Expr> {
+    fn expr_break(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
         let break_tok = input.parse()?;
         let label = input.parse()?;
         let expr = if input.is_empty()
             || input.peek::<tok::Semicolon>()
-            || (!consume_braces && input.peek::<tok::LCurly>())
+            || (!ctx.consume_braces && input.peek::<tok::LCurly>())
         {
             None
         } else {
-            Some(Box::new(Expr::any(input, consume_braces, false)?))
+            Some(input.parse_with(ctx.any_subexpr())?)
         };
 
         Ok(Expr::Break(ExprBreak {
@@ -284,7 +310,7 @@ impl Expr {
         }))
     }
 
-    pub fn expr_block(input: &mut ParseContext<'_>) -> Result<Expr> {
+    pub fn expr_block(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
         let (lcurly_tok, mut contents, rcurly_tok) = input.parse_between_curlys()?;
         let mut stmts = vec![];
         let final_expr;
@@ -300,10 +326,10 @@ impl Expr {
                 break;
             }
 
-            let expr = Expr::any(&mut contents, true, true)?;
+            let expr: Expr = contents.parse_with(ExprContext::any_stmt())?;
 
             if contents.is_empty() {
-                final_expr = Some(Box::new(expr));
+                final_expr = Some(Arc::new(expr));
                 break;
             } else if expr.needs_semicolon() {
                 contents.parse::<tok::Semicolon>()?;
@@ -322,92 +348,100 @@ impl Expr {
         }))
     }
 
-    fn expr_return(input: &mut ParseContext<'_>, consume_braces: bool) -> Result<Expr> {
+    fn expr_return(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
         let return_tok = input.parse()?;
         let expr = if input.is_empty()
             || input.peek::<tok::Semicolon>()
-            || (!consume_braces && input.peek::<tok::LCurly>())
+            || (!ctx.consume_braces && input.peek::<tok::LCurly>())
         {
             None
         } else {
-            Some(Box::new(Expr::any(input, consume_braces, false)?))
+            Some(input.parse_with(ctx.any_subexpr())?)
         };
 
         Ok(Expr::Return(ExprReturn { return_tok, expr }))
     }
 
-    fn expr_continue(input: &mut ParseContext<'_>) -> Result<Expr> {
+    fn expr_continue(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
         Ok(Expr::Continue(ExprContinue {
             continue_tok: input.parse()?,
             label: input.parse()?,
         }))
     }
 
-    fn expr_let(
-        input: &mut ParseContext<'_>,
-        consume_braces: bool,
-        allow_let: bool,
-    ) -> Result<Expr> {
+    fn expr_let(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
         let expr = Expr::Let(ExprLet {
             let_tok: input.parse()?,
             pat: input.parse()?,
             maybe_ty: input.parse()?,
             eq_tok: input.parse()?,
-            expr: Box::new(Expr::any(input, consume_braces, false)?),
+            expr: input.parse_with(ExprContext::any_expr())?,
         });
 
-        if allow_let {
+        if ctx.allow_let {
             Ok(expr)
         } else {
-            err!(AstError::DisallowLet(expr.span()))
+            Err(AstError::DisallowLet(expr.span()))
         }
     }
 
-    fn expr_control_flow(input: &mut ParseContext<'_>) -> Result<Expr> {
+    fn expr_control_flow(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
         let label = input.parse()?;
 
         if input.peek::<tok::Loop>() {
-            Expr::expr_loop(input, label)
+            Expr::expr_loop(input, ctx, label)
         } else if input.peek::<tok::While>() {
-            Expr::expr_while(input, label)
+            Expr::expr_while(input, ctx, label)
         } else if input.peek::<tok::For>() {
-            Expr::expr_for(input, label)
+            Expr::expr_for(input, ctx, label)
         } else {
             input.error_exhausted()?;
         }
     }
 
-    fn expr_loop(input: &mut ParseContext<'_>, label: Option<LoopLabel>) -> Result<Expr> {
+    fn expr_loop(
+        input: &mut ParseBuffer<'_>,
+        ctx: ExprContext,
+        label: Option<LoopLabel>,
+    ) -> AstResult<Expr> {
         Ok(Expr::Loop(ExprLoop {
             label,
             loop_tok: input.parse()?,
-            branch: Expr::sub_block(input)?,
+            branch: Expr::expr_block(input, ctx).map(Arc::new)?,
         }))
     }
 
-    fn expr_while(input: &mut ParseContext<'_>, label: Option<LoopLabel>) -> Result<Expr> {
+    fn expr_while(
+        input: &mut ParseBuffer<'_>,
+        ctx: ExprContext,
+        label: Option<LoopLabel>,
+    ) -> AstResult<Expr> {
         Ok(Expr::While(ExprWhile {
             label,
             while_tok: input.parse()?,
-            cond: Box::new(Expr::any(input, false, true)?),
-            branch: Expr::sub_block(input)?,
+            cond: input.parse_with(ExprContext::any_expr())?,
+            branch: Expr::expr_block(input, ctx).map(Arc::new)?,
         }))
     }
 
-    fn expr_for(input: &mut ParseContext<'_>, label: Option<LoopLabel>) -> Result<Expr> {
+    fn expr_for(
+        input: &mut ParseBuffer<'_>,
+        ctx: ExprContext,
+        label: Option<LoopLabel>,
+    ) -> AstResult<Expr> {
         Ok(Expr::For(ExprFor {
             label,
             for_tok: input.parse()?,
             pat: input.parse()?,
             in_tok: input.parse()?,
-            expr: Box::new(Expr::any(input, false, false)?),
-            branch: Expr::sub_block(input)?,
+            expr: input.parse_with(ExprContext::any_expr_before_braces())?,
+            branch: Expr::expr_block(input, ctx).map(Arc::new)?,
         }))
     }
 
-    fn expr_match(input: &mut ParseContext<'_>) -> Result<Expr> {
+    fn expr_match(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> AstResult<Expr> {
         let match_tok = input.parse()?;
-        let expr = Box::new(Expr::any(input, false, false)?);
+        let expr = input.parse_with(ExprContext::any_expr_before_braces())?;
 
         let (lcurly_tok, mut contents, rcurly_tok) = input.parse_between_curlys()?;
         let mut arms = vec![];
@@ -435,30 +469,25 @@ impl Expr {
         }))
     }
 
-    fn expr_if(input: &mut ParseContext<'_>) -> Result<Expr> {
+    fn expr_if(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
         Ok(Expr::If(ExprIf {
             if_tok: input.parse()?,
-            condition: Box::new(Expr::any(input, false, true)?),
-            branch: Expr::sub_block(input)?,
+            condition: input.parse_with(ExprContext::any_expr())?,
+            branch: Expr::expr_block(input, ctx).map(Arc::new)?,
             else_branch: input.parse()?,
         }))
     }
 
-    fn expr_unary(input: &mut ParseContext<'_>, consume_braces: bool) -> Result<Expr> {
+    fn expr_unary(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
         let op = input.parse()?;
 
         Ok(Expr::Unary(ExprUnary {
             op,
-            expr: Box::new(Expr::with_prec(
-                input,
-                Prec::Unary as _,
-                consume_braces,
-                false,
-            )?),
+            expr: input.parse_with(ctx.subexpr_with_prec(Prec::Unary))?,
         }))
     }
 
-    fn expr_closure(input: &mut ParseContext<'_>, consume_braces: bool) -> Result<Expr> {
+    fn expr_closure(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> AstResult<Expr> {
         let lpipe_tok = input.parse()?;
         let mut parameters = Punctuated::new();
         let rpipe_tok;
@@ -483,10 +512,10 @@ impl Expr {
 
         let expr = if return_ty.is_some() {
             // If there is a return type, then we must have a block following
-            Expr::sub_block(input)?
+            Expr::expr_block(input, ctx).map(Arc::new)?
         } else {
             // Otherwise, parse any expression
-            Box::new(Expr::any(input, consume_braces, false)?)
+            input.parse_with(ctx.any_subexpr())?
         };
 
         Ok(Expr::Closure(ExprClosure {
@@ -498,118 +527,104 @@ impl Expr {
         }))
     }
 
-    fn expr_range_trailing(input: &mut ParseContext<'_>, expr: Option<Expr>) -> Result<Expr> {
+    fn expr_range_trailing(input: &mut ParseBuffer<'_>, expr: Option<Expr>) -> AstResult<Expr> {
         Ok(Expr::RangeTrailing(ExprRangeTrailing {
-            expr: expr.map(Box::new),
+            expr: expr.map(Arc::new),
             dot_dot_dot_tok: input.parse()?,
         }))
     }
 
     fn expr_range_inclusive(
-        input: &mut ParseContext<'_>,
+        input: &mut ParseBuffer<'_>,
+        ctx: ExprContext,
         expr: Option<Expr>,
-        consume_braces: bool,
-    ) -> Result<Expr> {
+    ) -> AstResult<Expr> {
         Ok(Expr::RangeInclusive(ExprRangeInclusive {
-            left: expr.map(Box::new),
+            left: expr.map(Arc::new),
             dot_dot_eq_tok: input.parse()?,
-            right: Box::new(Expr::with_prec(
-                input,
-                Prec::Range as _,
-                consume_braces,
-                false,
-            )?),
+            right: input.parse_with(ctx.subexpr_with_prec(Prec::Range))?,
         }))
     }
 
     fn expr_range(
-        input: &mut ParseContext<'_>,
+        input: &mut ParseBuffer<'_>,
+        ctx: ExprContext,
         expr: Option<Expr>,
-        consume_braces: bool,
-    ) -> Result<Expr> {
+    ) -> AstResult<Expr> {
         Ok(Expr::Range(ExprRange {
-            left: expr.map(Box::new),
+            left: expr.map(Arc::new),
             dot_dot_tok: input.parse()?,
-            right: Box::new(Expr::with_prec(
-                input,
-                Prec::Range as _,
-                consume_braces,
-                false,
-            )?),
+            right: input.parse_with(ctx.subexpr_with_prec(Prec::Range))?,
         }))
     }
 
-    fn expr_access(input: &mut ParseContext<'_>, expr: Expr) -> Result<Expr> {
+    fn expr_access(input: &mut ParseBuffer<'_>, expr: Expr) -> AstResult<Expr> {
         Ok(Expr::Access(ExprAccess {
-            expr: Box::new(expr),
+            expr: Arc::new(expr),
             dot_tok: input.parse()?,
             kind: input.parse()?,
         }))
     }
 
-    fn expr_call(input: &mut ParseContext<'_>, expr: Expr) -> Result<Expr> {
+    fn expr_call(input: &mut ParseBuffer<'_>, expr: Expr) -> AstResult<Expr> {
         if !expr.is_callable() {
-            bail!(AstError::NotCallable(expr.span()));
+            return Err(AstError::NotCallable(expr.span()));
         }
 
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
         Ok(Expr::Call(ExprCall {
-            expr: Box::new(expr),
+            expr: Arc::new(expr),
             lparen_tok,
-            args: contents.parse_punctuated(rparen_tok)?,
+            args: contents.parse_punctuated_with(ExprContext::any_expr(), rparen_tok)?,
             rparen_tok,
         }))
     }
 
-    fn expr_index(input: &mut ParseContext<'_>, expr: Expr) -> Result<Expr> {
+    fn expr_index(input: &mut ParseBuffer<'_>, expr: Expr) -> AstResult<Expr> {
         let (lsq_tok, mut contents, rsq_tok) = input.parse_between_sqs()?;
-        let right = Box::new(Expr::any(&mut contents, true, false)?);
+        let right = contents.parse_with(ExprContext::any_expr())?;
 
         contents.expect_empty(rsq_tok)?;
 
         Ok(Expr::Index(ExprIndex {
             lsq_tok,
-            left: Box::new(expr),
+            left: Arc::new(expr),
             rsq_tok,
             right,
         }))
     }
 
-    fn expr_cast(input: &mut ParseContext<'_>, expr: Expr) -> Result<Expr> {
+    fn expr_cast(input: &mut ParseBuffer<'_>, expr: Expr) -> AstResult<Expr> {
         Ok(Expr::Cast(ExprCast {
-            expr: Box::new(expr),
+            expr: Arc::new(expr),
             as_tok: input.parse()?,
             ty: input.parse()?,
         }))
     }
 
-    fn should_continue(input: &mut ParseContext<'_>, prec: usize) -> bool {
+    fn should_continue(input: &mut ParseBuffer<'_>, prec: Prec) -> bool {
         let maybe_prec = Expr::maybe_prec(input);
-        let res = maybe_prec.map_or(false, |next| next > prec);
+        let res = maybe_prec.map_or(false, |next| next as usize > prec as usize);
         res
     }
 
-    fn maybe_prec(input: &mut ParseContext<'_>) -> Option<usize> {
+    fn maybe_prec(input: &mut ParseBuffer<'_>) -> Option<Prec> {
         if let Some(prec) = BinaryOperator::maybe_prec(input) {
             Some(prec)
         } else if input.peek::<tok::DotDot>() {
             // Also covers ... and ..=
-            Some(Prec::Range as _)
+            Some(Prec::Range)
         } else if input.peek::<tok::As>() {
-            Some(Prec::Cast as _)
+            Some(Prec::Cast)
         } else if input.peek::<tok::Dot>()
             || input.peek::<tok::LParen>()
             || input.peek::<tok::LSq>()
         {
-            Some(Prec::Call as _)
+            Some(Prec::Call)
         } else {
             None
         }
-    }
-
-    fn sub_block(input: &mut ParseContext<'_>) -> Result<Box<Expr>> {
-        Expr::expr_block(input).map(Box::new)
     }
 
     fn needs_semicolon(&self) -> bool {
@@ -688,64 +703,67 @@ impl Expr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprBlock {
     pub lcurly_tok: tok::LCurly,
     pub stmts: Vec<Expr>,
-    pub final_expr: Option<Box<Expr>>,
+    pub final_expr: Option<Arc<Expr>>,
     pub rcurly_tok: tok::RCurly,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprPath {
     pub path: Punctuated<PathSegment, tok::ColonColon>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprElaborated {
     pub ty: TyElaborated,
     pub colon_colon_tok: tok::ColonColon,
     pub path: Punctuated<PathSegment, tok::ColonColon>,
 }
 
-#[derive(Derivative)]
+#[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]
 pub enum ExprLiteral {
     #[derivative(Debug = "transparent")]
     Number(tok::Number),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprGroup {
     pub lparen_tok: tok::LParen,
     pub exprs: Punctuated<Expr, tok::Comma>,
     pub rparen_tok: tok::RParen,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprArray {
     pub lcurly_tok: tok::LCurly,
     pub exprs: Punctuated<Expr, tok::Comma>,
     pub rcurly_tok: tok::RCurly,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprLet {
     let_tok: tok::Let,
     pat: Pat,
     maybe_ty: Option<TypeAnnotation>,
     eq_tok: tok::Eq,
-    expr: Box<Expr>,
+    expr: Arc<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TypeAnnotation {
     colon_tok: tok::Colon,
     ty: Ty,
 }
 
 impl Parse for TypeAnnotation {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
+    type Context = ();
+    type Error = AstError;
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
         Ok(TypeAnnotation {
             colon_tok: input.parse()?,
             ty: input.parse()?,
@@ -754,35 +772,38 @@ impl Parse for TypeAnnotation {
 }
 
 impl ShouldParse for TypeAnnotation {
-    fn should_parse(input: &mut ParseContext<'_>) -> bool {
+    fn should_parse(input: &mut ParseBuffer<'_>) -> bool {
         input.peek::<tok::Colon>()
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprMatch {
     match_tok: tok::Match,
-    expr: Box<Expr>,
+    expr: Arc<Expr>,
     lcurly_tok: tok::LCurly,
     arms: Vec<MatchArm>,
     rcurly_tok: tok::RCurly,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct MatchArm {
     pub pat: Pat,
     pub maybe_ty: Option<TypeAnnotation>,
     arrow_tok: tok::BigArrow,
-    pub expr: Box<Expr>,
+    pub expr: Arc<Expr>,
 }
 
 impl Parse for MatchArm {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
+    type Context = ();
+    type Error = AstError;
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
         Ok(MatchArm {
             pat: input.parse()?,
             maybe_ty: input.parse()?,
             arrow_tok: input.parse()?,
-            expr: input.parse()?,
+            expr: input.parse_with(ExprContext::any_expr())?,
         })
     }
 }
@@ -793,56 +814,62 @@ impl MatchArm {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprIf {
     if_tok: tok::If,
-    condition: Box<Expr>,
-    branch: Box<Expr>,
+    condition: Arc<Expr>,
+    branch: Arc<Expr>,
     else_branch: Option<Else>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Else {
     else_tok: tok::Else,
-    branch: Box<Expr>,
+    branch: Arc<Expr>,
 }
 
 impl Parse for Else {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
+    type Context = ();
+    type Error = AstError;
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
         let else_tok = input.parse()?;
 
-        let branch = if input.peek::<tok::If>() {
-            Box::new(Expr::expr_if(input)?)
+        let branch = Arc::new(if input.peek::<tok::If>() {
+            Expr::expr_if(input, ExprContext::any_expr())?
         } else {
-            Expr::sub_block(input)?
-        };
+            Expr::expr_block(input, ExprContext::any_expr())?
+        });
 
         Ok(Else { else_tok, branch })
     }
 }
 
 impl ShouldParse for Else {
-    fn should_parse(input: &mut ParseContext<'_>) -> bool {
+    fn should_parse(input: &mut ParseBuffer<'_>) -> bool {
         input.peek::<tok::Else>()
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprWhile {
     label: Option<LoopLabel>,
     while_tok: tok::While,
-    cond: Box<Expr>,
-    branch: Box<Expr>,
+    cond: Arc<Expr>,
+    branch: Arc<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct LoopLabel {
     lifetime: tok::Lifetime,
     colon_tok: tok::Colon,
 }
 
 impl Parse for LoopLabel {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
+    type Context = ();
+    type Error = AstError;
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
         Ok(LoopLabel {
             lifetime: input.parse()?,
             colon_tok: input.parse()?,
@@ -851,43 +878,46 @@ impl Parse for LoopLabel {
 }
 
 impl ShouldParse for LoopLabel {
-    fn should_parse(input: &mut ParseContext<'_>) -> bool {
+    fn should_parse(input: &mut ParseBuffer<'_>) -> bool {
         input.peek::<tok::Lifetime>()
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprLoop {
     label: Option<LoopLabel>,
     loop_tok: tok::Loop,
-    branch: Box<Expr>,
+    branch: Arc<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprFor {
     label: Option<LoopLabel>,
     for_tok: tok::For,
     pat: Pat,
     in_tok: tok::In,
-    expr: Box<Expr>,
-    branch: Box<Expr>,
+    expr: Arc<Expr>,
+    branch: Arc<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprAccess {
-    expr: Box<Expr>,
+    expr: Arc<Expr>,
     dot_tok: tok::Dot,
     kind: AccessKind,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum AccessKind {
     Ident(tok::Ident, Option<AccessGenerics>),
     Number(tok::Number),
 }
 
 impl Parse for AccessKind {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
+    type Context = ();
+    type Error = AstError;
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
         Ok(if input.peek::<tok::Ident>() {
             AccessKind::Ident(input.parse()?, input.parse()?)
         } else if input.peek::<tok::Number>() {
@@ -898,14 +928,17 @@ impl Parse for AccessKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct AccessGenerics {
     colon_colon_tok: tok::ColonColon,
     generics: Generics,
 }
 
 impl Parse for AccessGenerics {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
+    type Context = ();
+    type Error = AstError;
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
         Ok(AccessGenerics {
             colon_colon_tok: input.parse()?,
             generics: input.parse()?,
@@ -914,18 +947,18 @@ impl Parse for AccessGenerics {
 }
 
 impl ShouldParse for AccessGenerics {
-    fn should_parse(input: &mut ParseContext<'_>) -> bool {
+    fn should_parse(input: &mut ParseBuffer<'_>) -> bool {
         input.peek::<tok::ColonColon>()
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprUnary {
     op: UnaryOperator,
-    expr: Box<Expr>,
+    expr: Arc<Expr>,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum UnaryOperator {
     Ref,
     RefMut,
@@ -935,7 +968,7 @@ pub enum UnaryOperator {
 }
 
 impl UnaryOperator {
-    fn peek(input: &mut ParseContext<'_>) -> Option<UnaryOperator> {
+    fn peek(input: &mut ParseBuffer<'_>) -> Option<UnaryOperator> {
         if input.peek::<tok::Amp>() {
             if input.peek2::<tok::Mut>() {
                 Some(UnaryOperator::RefMut)
@@ -955,7 +988,10 @@ impl UnaryOperator {
 }
 
 impl Parse for UnaryOperator {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
+    type Context = ();
+    type Error = AstError;
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
         match UnaryOperator::peek(input) {
             // If we have `&mut`, peek consume two tokens
             Some(u @ UnaryOperator::RefMut) => {
@@ -976,19 +1012,19 @@ impl Parse for UnaryOperator {
 }
 
 impl ShouldParse for UnaryOperator {
-    fn should_parse(input: &mut ParseContext<'_>) -> bool {
+    fn should_parse(input: &mut ParseBuffer<'_>) -> bool {
         UnaryOperator::peek(input).is_some()
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprBinary {
-    left: Box<Expr>,
+    left: Arc<Expr>,
     op: BinaryOperator,
-    right: Box<Expr>,
+    right: Arc<Expr>,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum BinaryOperator {
     Add,
     Subtract,
@@ -1009,7 +1045,7 @@ pub enum BinaryOperator {
 }
 
 impl BinaryOperator {
-    fn peek(input: &mut ParseContext<'_>) -> Option<BinaryOperator> {
+    fn peek(input: &mut ParseBuffer<'_>) -> Option<BinaryOperator> {
         if input.peek::<tok::Plus>() {
             Some(BinaryOperator::Add)
         } else if input.peek::<tok::Minus>() {
@@ -1047,12 +1083,12 @@ impl BinaryOperator {
         }
     }
 
-    fn maybe_prec(input: &mut ParseContext<'_>) -> Option<usize> {
+    fn maybe_prec(input: &mut ParseBuffer<'_>) -> Option<Prec> {
         BinaryOperator::peek(input).map(BinaryOperator::prec_of)
     }
 
-    fn prec_of(self) -> usize {
-        let prec = match self {
+    fn prec_of(self) -> Prec {
+        match self {
             BinaryOperator::Add | BinaryOperator::Subtract => Prec::Add,
             BinaryOperator::Multiply | BinaryOperator::Divide | BinaryOperator::Modulus =>
                 Prec::Multiply,
@@ -1067,9 +1103,7 @@ impl BinaryOperator {
             | BinaryOperator::GreaterEquals => Prec::Comparison,
             BinaryOperator::OrCircuit => Prec::OrCircuit,
             BinaryOperator::AndCircuit => Prec::AndCircuit,
-        };
-
-        prec as usize
+        }
     }
 
     fn num_tokens(self) -> usize {
@@ -1095,7 +1129,10 @@ impl BinaryOperator {
 }
 
 impl Parse for BinaryOperator {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
+    type Context = ();
+    type Error = AstError;
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
         if let Some(op) = BinaryOperator::peek(input) {
             for _ in 0..op.num_tokens() {
                 input.bump_tok().expect("Expect token");
@@ -1109,67 +1146,67 @@ impl Parse for BinaryOperator {
 }
 
 impl ShouldParse for BinaryOperator {
-    fn should_parse(input: &mut ParseContext<'_>) -> bool {
+    fn should_parse(input: &mut ParseBuffer<'_>) -> bool {
         BinaryOperator::peek(input).is_some()
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprRangeTrailing {
-    expr: Option<Box<Expr>>,
+    expr: Option<Arc<Expr>>,
     dot_dot_dot_tok: tok::DotDotDot,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprRangeInclusive {
-    left: Option<Box<Expr>>,
+    left: Option<Arc<Expr>>,
     dot_dot_eq_tok: tok::DotDotEq,
-    right: Box<Expr>,
+    right: Arc<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprRange {
-    left: Option<Box<Expr>>,
+    left: Option<Arc<Expr>>,
     dot_dot_tok: tok::DotDot,
-    right: Box<Expr>,
+    right: Arc<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprIndex {
-    left: Box<Expr>,
+    left: Arc<Expr>,
     lsq_tok: tok::LSq,
-    right: Box<Expr>,
+    right: Arc<Expr>,
     rsq_tok: tok::RSq,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprCall {
-    expr: Box<Expr>,
+    expr: Arc<Expr>,
     lparen_tok: tok::LParen,
     args: Punctuated<Expr, tok::Comma>,
     rparen_tok: tok::RParen,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprBreak {
     break_tok: tok::Break,
     label: Option<tok::Lifetime>,
-    expr: Option<Box<Expr>>,
+    expr: Option<Arc<Expr>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprContinue {
     continue_tok: tok::Continue,
     label: Option<tok::Lifetime>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprReturn {
     return_tok: tok::Return,
-    expr: Option<Box<Expr>>,
+    expr: Option<Arc<Expr>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprConstructor {
     path: Punctuated<PathSegment, tok::ColonColon>,
     lcurly_tok: tok::LCurly,
@@ -1177,14 +1214,17 @@ pub struct ExprConstructor {
     rcurly_tok: tok::RCurly,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ConstructorArg {
     ident: tok::Ident,
     expr: Option<MemberExpr>,
 }
 
 impl Parse for ConstructorArg {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
+    type Context = ();
+    type Error = AstError;
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
         Ok(ConstructorArg {
             ident: input.parse()?,
             expr: input.parse()?,
@@ -1192,44 +1232,50 @@ impl Parse for ConstructorArg {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct MemberExpr {
     colon_tok: tok::Colon,
     expr: Expr,
 }
 
 impl Parse for MemberExpr {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
+    type Context = ();
+    type Error = AstError;
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
         Ok(MemberExpr {
             colon_tok: input.parse()?,
-            expr: input.parse()?,
+            expr: input.parse_with(ExprContext::any_expr())?,
         })
     }
 }
 
 impl ShouldParse for MemberExpr {
-    fn should_parse(input: &mut ParseContext<'_>) -> bool {
+    fn should_parse(input: &mut ParseBuffer<'_>) -> bool {
         input.peek::<tok::Colon>()
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprClosure {
     lpipe_tok: tok::Pipe,
     parameters: Punctuated<ClosureParameter, tok::Comma>,
     rpipe_tok: tok::Pipe,
     return_ty: Option<ReturnTy>,
-    expr: Box<Expr>,
+    expr: Arc<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ClosureParameter {
     pat: Pat,
     ty: Option<TypeAnnotation>,
 }
 
 impl Parse for ClosureParameter {
-    fn parse(input: &mut ParseContext<'_>) -> Result<Self> {
+    type Context = ();
+    type Error = AstError;
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> AstResult<Self> {
         Ok(ClosureParameter {
             pat: input.parse()?,
             ty: input.parse()?,
@@ -1237,9 +1283,9 @@ impl Parse for ClosureParameter {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprCast {
-    expr: Box<Expr>,
+    expr: Arc<Expr>,
     as_tok: tok::As,
     ty: Ty,
 }

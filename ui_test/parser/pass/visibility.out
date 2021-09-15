@@ -1,0 +1,66 @@
+Mod {
+    items: [
+        Fun {
+            sig: Signature {
+                viz: Pub(
+                    Pub,
+                    Some(
+                        VisibilityRange {
+                            lparen_tok: LParen,
+                            kind: Site(
+                                Site,
+                            ),
+                            rparen_tok: RParen,
+                        },
+                    ),
+                ),
+                fn_tok: Fn,
+                ident: Ident {
+                    ident: "foo",
+                },
+                generics: None,
+                where_clause: None,
+                lparen_tok: LParen,
+                parameters: Punctuated {
+                    items: [],
+                    last: None,
+                },
+                rparen_tok: RParen,
+                return_ty: None,
+            },
+            body: ExprBlock {
+                lcurly_tok: LCurly,
+                stmts: [],
+                final_expr: None,
+                rcurly_tok: RCurly,
+            },
+        },
+        Fun {
+            sig: Signature {
+                viz: Pub(
+                    Pub,
+                    None,
+                ),
+                fn_tok: Fn,
+                ident: Ident {
+                    ident: "foo",
+                },
+                generics: None,
+                where_clause: None,
+                lparen_tok: LParen,
+                parameters: Punctuated {
+                    items: [],
+                    last: None,
+                },
+                rparen_tok: RParen,
+                return_ty: None,
+            },
+            body: ExprBlock {
+                lcurly_tok: LCurly,
+                stmts: [],
+                final_expr: None,
+                rcurly_tok: RCurly,
+            },
+        },
+    ],
+}

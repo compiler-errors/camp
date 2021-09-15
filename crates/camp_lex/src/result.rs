@@ -3,7 +3,9 @@ use codespan_derive::IntoDiagnostic;
 
 use crate::tok::TokenDelim;
 
-#[derive(IntoDiagnostic)]
+pub type LexResult<T> = std::result::Result<T, LexError>;
+
+#[derive(IntoDiagnostic, Debug, PartialEq, Eq, Clone)]
 #[file_id(FileId)]
 pub enum LexError {
     #[message = "Reached end of the file while parsing block comment"]

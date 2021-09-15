@@ -12,3 +12,4 @@ match_block_trailing_comma = true
 overflow_delimited_expr = true
 reorder_impl_items = true
 reorder_imports = true
+imports_granularity = "Module"

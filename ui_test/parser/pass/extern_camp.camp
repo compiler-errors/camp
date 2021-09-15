@@ -1,0 +1,3 @@
+extern site std;
+
+extern site std as camp_std;

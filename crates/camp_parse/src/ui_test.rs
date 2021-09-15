@@ -26,18 +26,15 @@ fn ui_tests() -> framework::Result<()> {
 }
 
 fn parse_file(test: &framework::UITest, expected_status: bool) -> framework::Result<bool> {
-    let parent_dir = test.path.parent().expect("Expected parent path").as_str();
-    let filename = test.path.file_name().expect("Expected file name");
     let (status, stdout, stderr) =
-        framework::cargo_run(&["parse", &parent_dir, "--root-file", &filename])?;
+        framework::cargo_run(&["parse", &format!("test={}", test.path)])?;
 
     framework::compare_test_data(test, expected_status, status, stdout, stderr)
 }
 
 #[test]
 fn std_test() -> framework::Result<()> {
-    let (status, _stdout, stderr) =
-        framework::cargo_run(&["parse", "std/", "--root-file", "lib.camp"])?;
+    let (status, _stdout, stderr) = framework::cargo_run(&["parse", "std=std/lib.camp"])?;
 
     // Fake test data, because we expect std to compile normally
     let std_test = framework::UITest {

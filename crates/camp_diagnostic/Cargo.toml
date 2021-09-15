@@ -1,9 +1,0 @@
-[package]
-name = "camp_diagnostic"
-version = "0.1.0"
-edition = "2018"
-
-[dependencies]
-camp_util = { path = "../camp_util" }
-camp_files = { path = "../camp_files" }
-codespan-derive = "0.1.0"
