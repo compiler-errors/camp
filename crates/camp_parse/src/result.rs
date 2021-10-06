@@ -12,6 +12,8 @@ pub enum ParseError {
     ExpectedTokens(#[primary] Span, String),
     #[message = "Visiblity attribute not expected here"]
     UnexpectedViz(#[primary] Span),
+    #[message = "Mutability token not expected before struct literal"]
+    UnexpectedMut(#[primary] Span),
     #[message = "Where clause cannot precede tuple members"]
     ImproperWhere(#[primary] Span),
     #[message = "This type is not a trait, cannot be implemented"]

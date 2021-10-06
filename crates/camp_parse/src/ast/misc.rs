@@ -331,3 +331,16 @@ impl Parse for PathSegment {
         })
     }
 }
+impl PathSegment {
+    pub fn span(&self) -> Span {
+        match self {
+            PathSegment::Site(tok) => tok.span,
+            PathSegment::Super(tok) => tok.span,
+            PathSegment::Mod(tok) => tok.span,
+            PathSegment::Extern(tok) => tok.span,
+            PathSegment::Ident(tok) => tok.span,
+            PathSegment::Generics(generics) => generics.lt_tok.span.until(generics.gt_tok.span),
+            PathSegment::Star(tok) => tok.span,
+        }
+    }
+}

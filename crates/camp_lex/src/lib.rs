@@ -3,8 +3,8 @@ pub mod tok;
 
 use camp_files::{FileId, Span};
 
+pub use crate::result::{LexError, LexResult};
 use crate::tok::*;
-pub use result::{LexError, LexResult};
 
 pub struct LexBuffer {
     pub tokens: Vec<Token>,

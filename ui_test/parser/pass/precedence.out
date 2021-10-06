@@ -23,6 +23,7 @@ Mod {
                     ExprLet {
                         let_tok: Let,
                         pat: PatPath {
+                            mut_tok: None,
                             path: Punctuated {
                                 items: [],
                                 last: Some(

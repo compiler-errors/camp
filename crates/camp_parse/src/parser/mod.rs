@@ -7,10 +7,10 @@ use std::sync::Arc;
 use camp_files::Span;
 use camp_lex::tok::{self as lex, Token as LexToken};
 use camp_lex::LexBuffer;
+pub use punctuated::Punctuated;
 
 use crate::tok::{LCurly, LParen, LSq, RCurly, RParen, RSq};
 use crate::{ParseDb, ParseError, ParseResult};
-pub use punctuated::Punctuated;
 
 #[derive(Clone)]
 pub struct ParseBuffer<'p> {
@@ -93,7 +93,10 @@ impl<'p> ParseBuffer<'p> {
         T::parse_with(self, ctx)
     }
 
-    pub fn parse_punctuated<Item, Sep, End>(self, end_tok: End) -> ParseResult<Punctuated<Item, Sep>>
+    pub fn parse_punctuated<Item, Sep, End>(
+        self,
+        end_tok: End,
+    ) -> ParseResult<Punctuated<Item, Sep>>
     where
         Item: Parse<Context = ()>,
         Sep: Parse<Context = ()>,

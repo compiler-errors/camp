@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use camp_files::CampsiteId;
+use camp_files::{CampsiteId, Span};
 use camp_util::{id_type, wrapper_id_type};
 use derivative::Derivative;
 
+use super::ReferencePrefix;
 use crate::ast::{
     Expr, ExprContext, GenericsDecl, Pat, PathSegment, ReturnTy, Supertraits, TraitGenerics,
     TraitTy, TraitTyPath, Ty, TyPath, Visibility,
@@ -50,7 +51,7 @@ pub struct Mod {
 }
 
 impl Mod {
-    pub fn parse_mod_file(db: &dyn ParseDb, id: ModId) -> ParseResult<Arc<Mod>> {
+    pub fn mod_ast_from_file(db: &dyn ParseDb, id: ModId) -> ParseResult<Arc<Mod>> {
         let file_id = db.mod_file(id)?;
 
         let contents = db.open_file(file_id)?;
@@ -92,7 +93,7 @@ pub struct ItemDecl {
     pub idx: usize,
 }
 
-#[derive(Hash, PartialEq, Eq, Derivative)]
+#[derive(Clone, Hash, PartialEq, Eq, Derivative)]
 #[derivative(Debug)]
 pub enum ModuleItem {
     #[derivative(Debug = "transparent")]
@@ -134,7 +135,7 @@ impl Parse for ModuleItem {
                 ModuleItem::Mod(m)
             } else if input.peek::<tok::Semicolon>() {
                 let _semi: tok::Semicolon = input.parse()?;
-                ModuleItem::Mod(input.db.parse_mod_file(id)?)
+                ModuleItem::Mod(input.db.mod_ast_from_file(id)?)
             } else {
                 lookahead.error_exhausted()?;
             }
@@ -227,6 +228,12 @@ impl Parse for Use {
             rename: input.parse()?,
             semi_tok: input.parse()?,
         })
+    }
+}
+
+impl Use {
+    pub fn span(&self) -> Span {
+        self.use_tok.span.until(self.path.last().unwrap().span())
     }
 }
 
@@ -511,8 +518,8 @@ impl Parse for Enum {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct EnumVariant {
-    ident: tok::Ident,
-    fields: Fields,
+    pub ident: tok::Ident,
+    pub fields: Fields,
 }
 
 impl Parse for EnumVariant {
@@ -587,21 +594,90 @@ impl Parse for Signature {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct Parameter {
-    pat: Pat,
-    colon_tok: tok::Colon,
-    ty: Ty,
+#[derive(Derivative, PartialEq, Eq, Hash)]
+#[derivative(Debug)]
+pub enum Parameter {
+    #[derivative(Debug = "transparent")]
+    Named(ParameterNamed),
+    #[derivative(Debug = "transparent")]
+    LSelf(ParameterSelf),
+    #[derivative(Debug = "transparent")]
+    SelfRef(ParameterSelfRef),
 }
 
 impl Parse for Parameter {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
-        Ok(Parameter {
+        if input.peek::<tok::Mut>() || input.peek::<tok::LSelf>() {
+            let mut fork = input.clone();
+            if let Ok(param) = fork.parse::<ParameterSelf>() {
+                *input = fork;
+                return Ok(Parameter::LSelf(param));
+            }
+        }
+
+        if input.peek::<tok::Amp>() {
+            let mut fork = input.clone();
+            if let Ok(param) = fork.parse::<ParameterSelfRef>() {
+                *input = fork;
+                return Ok(Parameter::SelfRef(param));
+            }
+        }
+
+        Ok(Parameter::Named(input.parse()?))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct ParameterNamed {
+    pub pat: Pat,
+    pub colon_tok: tok::Colon,
+    pub ty: Ty,
+}
+
+impl Parse for ParameterNamed {
+    type Context = ();
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+        Ok(ParameterNamed {
             pat: input.parse()?,
             colon_tok: input.parse()?,
             ty: input.parse()?,
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct ParameterSelf {
+    pub mut_tok: Option<tok::Mut>,
+    pub self_tok: tok::LSelf,
+}
+
+impl Parse for ParameterSelf {
+    type Context = ();
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+        Ok(ParameterSelf {
+            mut_tok: input.parse()?,
+            self_tok: input.parse()?,
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct ParameterSelfRef {
+    pub prefix: ReferencePrefix,
+    pub self_tok: tok::LSelf,
+}
+
+impl Parse for ParameterSelfRef {
+    type Context = ();
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+        Ok(ParameterSelfRef {
+            prefix: input.parse()?,
+            self_tok: input.parse()?,
         })
     }
 }
@@ -635,7 +711,7 @@ impl Parse for Trait {
         let supertraits = input.parse()?;
         let where_clause = input.parse()?;
 
-        let (lcurly_tok, contents, rcurly_tok) = input.parse_between_curlys()?;
+        let (lcurly_tok, mut contents, rcurly_tok) = input.parse_between_curlys()?;
         let mut trait_items = vec![];
 
         while !contents.is_empty() {
@@ -645,7 +721,7 @@ impl Parse for Trait {
             };
             let id = input.db.trait_decl(decl);
 
-            trait_items.push(input.parse_with(id)?);
+            trait_items.push(contents.parse_with(id)?);
         }
 
         contents.expect_empty(rcurly_tok)?;
@@ -797,7 +873,7 @@ impl Parse for Impl {
             ty = ty_or_trait;
         }
 
-        let (lcurly_tok, contents, rcurly_tok) = input.parse_between_curlys()?;
+        let (lcurly_tok, mut contents, rcurly_tok) = input.parse_between_curlys()?;
         let mut impl_items = vec![];
 
         while !contents.is_empty() {
@@ -807,7 +883,7 @@ impl Parse for Impl {
             };
             let id = input.db.impl_decl(decl);
 
-            impl_items.push(input.parse_with(id)?);
+            impl_items.push(contents.parse_with(id)?);
         }
 
         contents.expect_empty(rcurly_tok)?;

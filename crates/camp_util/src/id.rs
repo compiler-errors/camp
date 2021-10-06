@@ -52,5 +52,11 @@ macro_rules! wrapper_id_type {
                 self.0
             }
         }
+
+        impl Into<$wrapped> for &$name {
+            fn into(self) -> $wrapped {
+                self.0
+            }
+        }
     };
 }

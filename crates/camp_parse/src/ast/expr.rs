@@ -1,6 +1,7 @@
+use std::sync::Arc;
+
 use camp_files::Span;
 use derivative::Derivative;
-use std::sync::Arc;
 
 use crate::ast::{Generics, Pat, PathSegment, ReturnTy, Ty, TyElaborated};
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};

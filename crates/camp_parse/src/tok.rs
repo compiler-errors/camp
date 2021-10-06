@@ -36,6 +36,8 @@ crate::declare_identifiers! {
     "Fn" => CFn,
     "FnMut" => CFnMut,
     "FnOnce" => CFnOnce,
+    "Self" => CSelf,
+    "self" => LSelf,
     _ => Ident,
 }
 

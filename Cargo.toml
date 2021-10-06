@@ -10,12 +10,11 @@ members = [
     "crates/camp_files",
     "crates/camp_lex",
     "crates/camp_parse",
-    # "crates/camp_import_resolve",
+    "crates/camp_import_resolve",
 ]
 
 [dependencies]
 camino = "1.0.5"
-camp_parse = { path = "crates/camp_parse" }
 camp_driver = { path = "crates/camp_driver" }
 codespan-derive = "0.1.1"
 codespan-reporting = "0.11.1"

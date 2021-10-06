@@ -108,7 +108,8 @@ pub fn cargo_run(args: &[&str]) -> Result<(bool, String, String)> {
     let output = Command::new("cargo")
         .arg("run")
         .arg("--quiet")
-        .arg("--features=camp_parse/ignore_ids")
+        .arg("--features=camp_driver/ignore_ids")
+        .env("RUSTFLAGS", "-Awarnings") // Suppress warnings
         .arg("--")
         .arg("--no-color")
         .args(args)

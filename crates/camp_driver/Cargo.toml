@@ -3,8 +3,6 @@ name = "camp_driver"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 camino = "1.0.5"
 camp_parse = { path = "../camp_parse" }
@@ -12,3 +10,8 @@ camp_files = { path = "../camp_files" }
 codespan-derive = "0.1.1"
 codespan-reporting = "0.11.1"
 salsa = "0.16.1"
+camp_lex = { path = "../camp_lex" }
+camp_import_resolve = { path = "../camp_import_resolve" }
+
+[features]
+ignore_ids = ["camp_parse/ignore_ids"]

@@ -1,6 +1,7 @@
 mod codespan;
 mod result;
 
+use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -8,6 +9,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use camp_util::id_type;
 use codespan_derive::IntoLabel;
+use maplit::btreemap;
 
 pub use crate::result::{FileError, FileResult};
 
@@ -15,14 +17,25 @@ id_type!(pub FileId);
 
 #[salsa::query_group(FilesStorage)]
 pub trait FilesDb {
+    #[salsa::input]
+    fn campsites(&self) -> Arc<[CampsiteArg]>;
+
     #[salsa::interned]
-    fn campsite_decl(&self, info: CampsiteDecl) -> CampsiteId;
+    fn campsite_decl(&self, decl: Arc<CampsiteDecl>) -> CampsiteId;
+
+    fn campsites_by_name(&self) -> FileResult<Arc<BTreeMap<String, CampsiteId>>>;
+
+    fn campsite_by_name(&self, name: String) -> FileResult<Option<CampsiteId>>;
+
+    fn campsite_name(&self, campsite: CampsiteId) -> String;
+
+    fn campsite_root_file_id(&self, id: CampsiteId) -> FileId;
 
     fn campsite_root_file(&self, id: CampsiteId) -> Utf8PathBuf;
 
-    fn campsite_root_file_id(&self, id: CampsiteId) -> FileResult<FileId>;
-
     fn file_id(&self, path: Utf8PathBuf) -> FileResult<FileId>;
+
+    fn lookup_file_id(&self, id: FileId) -> Utf8PathBuf;
 
     #[salsa::interned]
     fn file_id_for_canonical_path(&self, path: Utf8PathBuf) -> FileId;
@@ -38,12 +51,53 @@ pub trait FilesDb {
     fn line_start(&self, id: FileId, idx: usize) -> FileResult<usize>;
 }
 
-fn campsite_root_file(db: &dyn FilesDb, id: CampsiteId) -> Utf8PathBuf {
-    db.lookup_campsite_decl(id).path.clone()
+fn campsites_by_name(db: &dyn FilesDb) -> FileResult<Arc<BTreeMap<String, CampsiteId>>> {
+    let mut mapping = btreemap![];
+
+    for arg in db.campsites().iter() {
+        let file_id = db.file_id(arg.path.clone())?;
+
+        if mapping.contains_key(&arg.name) {
+            let existing_id = db.lookup_campsite_decl(mapping[&arg.name]).file_id;
+            if existing_id != file_id {
+                return Err(FileError::DuplicateCampsite {
+                    name: arg.name.clone(),
+                    path1: arg.path.clone(),
+                    path2: db.lookup_file_id(existing_id),
+                });
+            }
+        } else {
+            mapping.insert(
+                arg.name.clone(),
+                db.campsite_decl(Arc::new(CampsiteDecl {
+                    name: arg.name.clone(),
+                    file_id,
+                })),
+            );
+        }
+    }
+
+    Ok(Arc::new(mapping))
 }
 
-fn campsite_root_file_id(db: &dyn FilesDb, id: CampsiteId) -> FileResult<FileId> {
-    db.file_id(db.campsite_root_file(id))
+fn campsite_by_name(db: &dyn FilesDb, name: String) -> FileResult<Option<CampsiteId>> {
+    let campsites = db.campsites_by_name()?;
+
+    // NOTE: We don't map this to a result yet because we don't have a span to
+    // associate this with yet.
+    Ok(campsites.get(&name).copied())
+}
+
+fn campsite_name(db: &dyn FilesDb, campsite: CampsiteId) -> String {
+    db.lookup_campsite_decl(campsite).name.clone()
+}
+
+fn campsite_root_file(db: &dyn FilesDb, id: CampsiteId) -> Utf8PathBuf {
+    db.lookup_file_id(db.campsite_root_file_id(id))
+}
+
+fn campsite_root_file_id(db: &dyn FilesDb, id: CampsiteId) -> FileId {
+    db.lookup_campsite_decl(id).file_id
 }
 
 fn file_id(db: &dyn FilesDb, path: Utf8PathBuf) -> FileResult<FileId> {
@@ -53,22 +107,23 @@ fn file_id(db: &dyn FilesDb, path: Utf8PathBuf) -> FileResult<FileId> {
         .try_into()
         .map_err(|e| FileError::NotUtf8(e))?;
 
-    Ok(db.file_id_for_canonical_path(canonical_path))
-}
-
-fn open_file(db: &dyn FilesDb, id: FileId) -> FileResult<Arc<str>> {
-    let path: Utf8PathBuf = db.lookup_file_id_for_canonical_path(id);
-
-    if cfg!(debug_assertions) {
-        let canonical_path = path
-            .canonicalize()
-            .expect("Expected canonical_path to be canonical");
-        debug_assert_eq!(canonical_path, path);
-    }
-
     if !path.is_file() {
         return Err(FileError::NotFile(path));
     }
+
+    if path.extension() != Some("camp") {
+        return Err(FileError::NotCampFile(path));
+    }
+
+    Ok(db.file_id_for_canonical_path(canonical_path))
+}
+
+fn lookup_file_id(db: &dyn FilesDb, id: FileId) -> Utf8PathBuf {
+    db.lookup_file_id_for_canonical_path(id)
+}
+
+fn open_file(db: &dyn FilesDb, id: FileId) -> FileResult<Arc<str>> {
+    let path: Utf8PathBuf = db.lookup_file_id(id);
 
     Ok(std::fs::read_to_string(&path)
         .map_err(FileError::from)?
@@ -97,22 +152,27 @@ id_type!(pub CampsiteId);
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct CampsiteDecl {
-    path: Utf8PathBuf,
-    name: String,
+    pub file_id: FileId,
+    pub name: String,
 }
 
-impl FromStr for CampsiteDecl {
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct CampsiteArg {
+    pub name: String,
+    pub path: Utf8PathBuf,
+}
+
+impl FromStr for CampsiteArg {
     type Err = String;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some((before, after)) = s.split_once('=') {
-            // TODO: verify name is an identifier
-            Ok(CampsiteDecl {
-                name: before.to_owned(),
-                path: Utf8PathBuf::from(after),
+    fn from_str(arg: &str) -> Result<Self, Self::Err> {
+        if let Some((name, path)) = arg.split_once('=') {
+            Ok(CampsiteArg {
+                name: name.to_string(),
+                path: Utf8PathBuf::from(path),
             })
         } else {
-            Err(format!("Expected an `=` token in argument '{}'", s))
+            Err(format!("Expected '=' in campsite argument: {}", arg))
         }
     }
 }

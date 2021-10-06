@@ -34,7 +34,7 @@ impl<'f> codespan_reporting::files::Files<'f> for dyn FilesDb + '_ {
     type Source = Arc<str>;
 
     fn name(&'f self, id: Self::FileId) -> Result<Self::Name, CodespanError> {
-        Ok(self.lookup_file_id_for_canonical_path(id))
+        Ok(self.lookup_file_id(id))
     }
 
     fn source(&'f self, id: Self::FileId) -> Result<Self::Source, CodespanError> {

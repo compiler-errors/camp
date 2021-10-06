@@ -13,3 +13,4 @@ overflow_delimited_expr = true
 reorder_impl_items = true
 reorder_imports = true
 imports_granularity = "Module"
+group_imports = "StdExternalCrate"

@@ -2,7 +2,7 @@ use derivative::Derivative;
 
 use crate::ast::Generics;
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, ParseResult};
+use crate::{tok, ParseError, ParseResult};
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]
@@ -87,7 +87,7 @@ impl Pat {
             Pat::Group(input.parse()?)
         } else if input.peek::<tok::LCurly>() {
             Pat::Array(input.parse()?)
-        } else if input.peek::<tok::Ident>() {
+        } else if input.peek::<tok::Ident>() || input.peek::<tok::Mut>() {
             Pat::pat_ident(input)?
         } else {
             input.error_exhausted()?;
@@ -95,6 +95,7 @@ impl Pat {
     }
 
     fn pat_ident(input: &mut ParseBuffer<'_>) -> ParseResult<Pat> {
+        let mut_tok = input.parse()?;
         let mut path = Punctuated::new();
 
         loop {
@@ -121,8 +122,12 @@ impl Pat {
         let fields = input.parse()?;
 
         Ok(if generics.is_none() && matches!(fields, PatFields::None) {
-            Pat::Path(PatPath { path })
+            Pat::Path(PatPath { mut_tok, path })
         } else {
+            if let Some(mut_tok) = mut_tok {
+                return Err(ParseError::UnexpectedMut(mut_tok.span));
+            }
+
             Pat::Struct(PatStruct {
                 path,
                 generics,
@@ -134,6 +139,7 @@ impl Pat {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct PatPath {
+    mut_tok: Option<tok::Mut>,
     path: Punctuated<tok::Ident, tok::ColonColon>,
 }
 

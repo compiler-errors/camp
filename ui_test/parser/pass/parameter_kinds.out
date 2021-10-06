@@ -1,0 +1,274 @@
+Mod {
+    items: [
+        Trait {
+            viz: Private,
+            fn_tok: Trait,
+            ident: Ident {
+                ident: "Foo",
+            },
+            generics: None,
+            supertraits: None,
+            where_clause: None,
+            lcurly_tok: LCurly,
+            trait_items: [
+                TraitFn {
+                    signature: Signature {
+                        viz: Private,
+                        fn_tok: Fn,
+                        ident: Ident {
+                            ident: "f5",
+                        },
+                        generics: None,
+                        where_clause: None,
+                        lparen_tok: LParen,
+                        parameters: Punctuated {
+                            items: [],
+                            last: Some(
+                                ParameterSelf {
+                                    mut_tok: None,
+                                    self_tok: LSelf,
+                                },
+                            ),
+                        },
+                        rparen_tok: RParen,
+                        return_ty: None,
+                    },
+                    semi_tok: Semicolon,
+                },
+                TraitFn {
+                    signature: Signature {
+                        viz: Private,
+                        fn_tok: Fn,
+                        ident: Ident {
+                            ident: "f1",
+                        },
+                        generics: None,
+                        where_clause: None,
+                        lparen_tok: LParen,
+                        parameters: Punctuated {
+                            items: [],
+                            last: Some(
+                                ParameterSelfRef {
+                                    prefix: ReferencePrefix {
+                                        amp_tok: Amp,
+                                        lifetime: None,
+                                        mutability: Const,
+                                    },
+                                    self_tok: LSelf,
+                                },
+                            ),
+                        },
+                        rparen_tok: RParen,
+                        return_ty: None,
+                    },
+                    semi_tok: Semicolon,
+                },
+                TraitFn {
+                    signature: Signature {
+                        viz: Private,
+                        fn_tok: Fn,
+                        ident: Ident {
+                            ident: "f4",
+                        },
+                        generics: None,
+                        where_clause: None,
+                        lparen_tok: LParen,
+                        parameters: Punctuated {
+                            items: [],
+                            last: Some(
+                                ParameterSelfRef {
+                                    prefix: ReferencePrefix {
+                                        amp_tok: Amp,
+                                        lifetime: None,
+                                        mutability: Mut(
+                                            Mut,
+                                        ),
+                                    },
+                                    self_tok: LSelf,
+                                },
+                            ),
+                        },
+                        rparen_tok: RParen,
+                        return_ty: None,
+                    },
+                    semi_tok: Semicolon,
+                },
+                TraitFn {
+                    signature: Signature {
+                        viz: Private,
+                        fn_tok: Fn,
+                        ident: Ident {
+                            ident: "f5",
+                        },
+                        generics: None,
+                        where_clause: None,
+                        lparen_tok: LParen,
+                        parameters: Punctuated {
+                            items: [],
+                            last: Some(
+                                ParameterSelf {
+                                    mut_tok: Some(
+                                        Mut,
+                                    ),
+                                    self_tok: LSelf,
+                                },
+                            ),
+                        },
+                        rparen_tok: RParen,
+                        return_ty: None,
+                    },
+                    semi_tok: Semicolon,
+                },
+                TraitFn {
+                    signature: Signature {
+                        viz: Private,
+                        fn_tok: Fn,
+                        ident: Ident {
+                            ident: "f6",
+                        },
+                        generics: None,
+                        where_clause: None,
+                        lparen_tok: LParen,
+                        parameters: Punctuated {
+                            items: [],
+                            last: Some(
+                                ParameterSelfRef {
+                                    prefix: ReferencePrefix {
+                                        amp_tok: Amp,
+                                        lifetime: Some(
+                                            Lifetime {
+                                                value: "a",
+                                            },
+                                        ),
+                                        mutability: Const,
+                                    },
+                                    self_tok: LSelf,
+                                },
+                            ),
+                        },
+                        rparen_tok: RParen,
+                        return_ty: None,
+                    },
+                    semi_tok: Semicolon,
+                },
+                TraitFn {
+                    signature: Signature {
+                        viz: Private,
+                        fn_tok: Fn,
+                        ident: Ident {
+                            ident: "f7",
+                        },
+                        generics: None,
+                        where_clause: None,
+                        lparen_tok: LParen,
+                        parameters: Punctuated {
+                            items: [],
+                            last: Some(
+                                ParameterSelfRef {
+                                    prefix: ReferencePrefix {
+                                        amp_tok: Amp,
+                                        lifetime: Some(
+                                            Lifetime {
+                                                value: "a",
+                                            },
+                                        ),
+                                        mutability: Mut(
+                                            Mut,
+                                        ),
+                                    },
+                                    self_tok: LSelf,
+                                },
+                            ),
+                        },
+                        rparen_tok: RParen,
+                        return_ty: None,
+                    },
+                    semi_tok: Semicolon,
+                },
+                TraitFn {
+                    signature: Signature {
+                        viz: Private,
+                        fn_tok: Fn,
+                        ident: Ident {
+                            ident: "f8",
+                        },
+                        generics: None,
+                        where_clause: None,
+                        lparen_tok: LParen,
+                        parameters: Punctuated {
+                            items: [],
+                            last: Some(
+                                ParameterNamed {
+                                    pat: PatPath {
+                                        mut_tok: Some(
+                                            Mut,
+                                        ),
+                                        path: Punctuated {
+                                            items: [],
+                                            last: Some(
+                                                Ident {
+                                                    ident: "a",
+                                                },
+                                            ),
+                                        },
+                                    },
+                                    colon_tok: Colon,
+                                    ty: TyPath {
+                                        path: Punctuated {
+                                            items: [],
+                                            last: Some(
+                                                Ident {
+                                                    ident: "i32",
+                                                },
+                                            ),
+                                        },
+                                        generics: None,
+                                    },
+                                },
+                            ),
+                        },
+                        rparen_tok: RParen,
+                        return_ty: None,
+                    },
+                    semi_tok: Semicolon,
+                },
+                TraitFn {
+                    signature: Signature {
+                        viz: Private,
+                        fn_tok: Fn,
+                        ident: Ident {
+                            ident: "f9",
+                        },
+                        generics: None,
+                        where_clause: None,
+                        lparen_tok: LParen,
+                        parameters: Punctuated {
+                            items: [],
+                            last: Some(
+                                ParameterNamed {
+                                    pat: PatPath {
+                                        mut_tok: None,
+                                        path: Punctuated {
+                                            items: [],
+                                            last: Some(
+                                                Ident {
+                                                    ident: "b",
+                                                },
+                                            ),
+                                        },
+                                    },
+                                    colon_tok: Colon,
+                                    ty: CSelf,
+                                },
+                            ),
+                        },
+                        rparen_tok: RParen,
+                        return_ty: None,
+                    },
+                    semi_tok: Semicolon,
+                },
+            ],
+            rcurly_tok: RCurly,
+        },
+    ],
+}

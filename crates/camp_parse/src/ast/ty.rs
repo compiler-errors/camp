@@ -1,11 +1,11 @@
+use std::sync::Arc;
+
 use camp_files::Span;
 use derivative::Derivative;
-use std::sync::Arc;
 
 use crate::ast::{Mutability, ReturnTy, Supertrait, Supertraits};
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::tok::{self};
-use crate::ParseResult;
+use crate::{tok, ParseResult};
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]
@@ -32,6 +32,8 @@ pub enum Ty {
     Fn(TyFn),
     #[derivative(Debug = "transparent")]
     Dyn(TyDyn),
+    #[derivative(Debug = "transparent")]
+    SelfTy(tok::CSelf),
 }
 
 impl Ty {
@@ -56,6 +58,8 @@ impl Ty {
             Ty::Fn(input.parse()?)
         } else if input.peek::<tok::Dyn>() {
             Ty::Dyn(input.parse()?)
+        } else if input.peek::<tok::CSelf>() {
+            Ty::SelfTy(input.parse()?)
         } else {
             input.error_exhausted()?;
         })
@@ -68,7 +72,7 @@ impl Ty {
             Ty::Group(t) => t.lparen_tok.span.until(t.rparen_tok.span),
             Ty::Array(t) => t.lsq_tok.span.until(t.rsq_tok.span),
             Ty::Pointer(t) => t.star_tok.span.until(t.ty.span()),
-            Ty::Reference(t) => t.amp_tok.span.until(t.ty.span()),
+            Ty::Reference(t) => t.prefix.amp_tok.span.until(t.ty.span()),
             Ty::Infer(t) => t.underscore_tok.span,
             Ty::Never(t) => t.bang_tok.span,
             Ty::Path(t) => {
@@ -91,12 +95,13 @@ impl Ty {
                 .dyn_tok
                 .span
                 .until(t.trait_tys.last().expect("At least one trait ty").span()),
+            Ty::SelfTy(t) => t.span,
         }
     }
 
     fn is_associable(&self) -> bool {
         match self {
-            Ty::Elaborated(_) | Ty::Assoc(_) | Ty::Path(_) => true,
+            Ty::Elaborated(_) | Ty::Assoc(_) | Ty::Path(_) | Ty::SelfTy(_) => true,
             Ty::Group(_)
             | Ty::Array(_)
             | Ty::Pointer(_)
@@ -271,9 +276,7 @@ impl Parse for TyPointer {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TyReference {
-    amp_tok: tok::Amp,
-    lifetime: Option<tok::Lifetime>,
-    mutability: Mutability,
+    prefix: ReferencePrefix,
     ty: Arc<Ty>,
 }
 
@@ -282,10 +285,27 @@ impl Parse for TyReference {
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(TyReference {
+            prefix: input.parse()?,
+            ty: input.parse()?,
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct ReferencePrefix {
+    amp_tok: tok::Amp,
+    lifetime: Option<tok::Lifetime>,
+    mutability: Mutability,
+}
+
+impl Parse for ReferencePrefix {
+    type Context = ();
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+        Ok(ReferencePrefix {
             amp_tok: input.parse()?,
             lifetime: input.parse()?,
             mutability: input.parse()?,
-            ty: input.parse()?,
         })
     }
 }
@@ -359,9 +379,9 @@ impl Parse for TyPath {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Generics {
-    lt_tok: tok::Lt,
-    generics: Punctuated<Generic, tok::Comma>,
-    gt_tok: tok::Gt,
+    pub lt_tok: tok::Lt,
+    pub generics: Punctuated<Generic, tok::Comma>,
+    pub gt_tok: tok::Gt,
 }
 
 impl Parse for Generics {

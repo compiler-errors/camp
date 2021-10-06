@@ -1,0 +1,11 @@
+trait Foo {
+    fn f5(self);
+    fn f1(&self);
+    fn f4(&mut self);
+    fn f5(mut self);
+    fn f6(&'a self);
+    fn f7(&'a mut self);
+    
+    fn f8(mut a: i32);
+    fn f9(b: Self);
+}

@@ -1,5 +1,4 @@
 use camino::Utf8PathBuf;
-
 use camp_util::ui_test as framework;
 
 #[test]

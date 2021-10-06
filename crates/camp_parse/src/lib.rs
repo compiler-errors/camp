@@ -14,19 +14,44 @@ use camino::Utf8PathBuf;
 use camp_files::{CampsiteId, FileId};
 use log::debug;
 
-use ast::{
-    ImplItemDecl, ImplItemId, ItemDecl, ItemId, Mod, ModDecl, ModId, TraitItemDecl, TraitItemId,
+use crate::ast::{
+    Enum, EnumId, ImplItemDecl, ImplItemId, ItemDecl, ItemId, Mod, ModDecl, ModId, ModuleItem,
+    TraitItemDecl, TraitItemId,
 };
-pub use result::{ParseError, ParseResult};
+pub use crate::result::{ParseError, ParseResult};
 
 #[salsa::query_group(ParseStorage)]
 pub trait ParseDb: camp_files::FilesDb {
-    fn parse_campsite(&self, id: CampsiteId) -> ParseResult<Arc<Mod>>;
+    fn campsite_root_mod_id(&self, id: CampsiteId) -> ModId;
 
-    #[salsa::invoke(Mod::parse_mod_file)]
-    fn parse_mod_file(&self, id: ModId) -> ParseResult<Arc<Mod>>;
+    fn campsite_ast(&self, id: CampsiteId) -> ParseResult<Arc<Mod>>;
+
+    fn mod_ast(&self, id: ModId) -> ParseResult<Arc<Mod>>;
+
+    fn item_ast(&self, id: ItemId) -> ParseResult<ModuleItem>;
+
+    fn enum_ast(&self, id: EnumId) -> ParseResult<Arc<Enum>>;
+
+    /// Lookup id of the campsite that contains the given module
+    fn campsite_of(&self, module: ModId) -> CampsiteId;
+
+    /// Lookup id of the parent module, if it isn't a campsite root
+    fn parent_of(&self, module: ModId) -> Option<ModId>;
+
+    /// Lookup id of the module that contains the given item
+    fn mod_of(&self, item: ItemId) -> ModId;
+
+    /// Returns if ancestor is an ancestor module of (or _is_) the given module
+    fn is_ancestor_of(&self, ancestor: ModId, module: ModId) -> bool;
+
+    fn mod_name(&self, module: ModId) -> String;
+
+    fn item_name(&self, item: ItemId) -> ParseResult<String>;
 
     // ----- Internal plumbing ----- //
+
+    #[salsa::invoke(Mod::mod_ast_from_file)]
+    fn mod_ast_from_file(&self, id: ModId) -> ParseResult<Arc<Mod>>;
 
     #[salsa::interned]
     fn mod_decl(&self, decl: ModDecl) -> ModId;
@@ -45,14 +70,17 @@ pub trait ParseDb: camp_files::FilesDb {
     fn impl_decl(&self, decl: ImplItemDecl) -> ImplItemId;
 }
 
-fn parse_campsite(db: &dyn ParseDb, id: CampsiteId) -> ParseResult<Arc<Mod>> {
-    let id = db.mod_decl(ModDecl::CampsiteRoot(id));
-    db.parse_mod_file(id)
+fn campsite_root_mod_id(db: &dyn ParseDb, id: CampsiteId) -> ModId {
+    db.mod_decl(ModDecl::CampsiteRoot(id))
+}
+
+fn campsite_ast(db: &dyn ParseDb, id: CampsiteId) -> ParseResult<Arc<Mod>> {
+    db.mod_ast_from_file(db.campsite_root_mod_id(id))
 }
 
 fn mod_file(db: &dyn ParseDb, id: ModId) -> ParseResult<FileId> {
     match db.lookup_mod_decl(id) {
-        ModDecl::CampsiteRoot(id) => Ok(db.campsite_root_file_id(id)?),
+        ModDecl::CampsiteRoot(id) => Ok(db.campsite_root_file_id(id)),
         ModDecl::Submod(decl) => {
             let parent_mod_id = db.lookup_item_decl(decl.id).mod_id;
             let parent_directory = db.submod_directory(parent_mod_id)?;
@@ -121,4 +149,78 @@ fn submod_directory(db: &dyn ParseDb, id: ModId) -> ParseResult<Utf8PathBuf> {
             }
         },
     }
+}
+
+fn mod_ast(db: &dyn ParseDb, id: ModId) -> ParseResult<Arc<Mod>> {
+    match db.lookup_mod_decl(id) {
+        ModDecl::CampsiteRoot(id) => db.campsite_ast(id),
+        ModDecl::Submod(decl) =>
+            if let ModuleItem::Mod(ast) = db.item_ast(decl.id)? {
+                Ok(ast)
+            } else {
+                unreachable!()
+            },
+    }
+}
+
+fn item_ast(db: &dyn ParseDb, id: ItemId) -> ParseResult<ModuleItem> {
+    let decl = db.lookup_item_decl(id);
+    let module = db.mod_ast(decl.mod_id)?;
+    Ok(module.items[decl.idx].clone())
+}
+
+fn enum_ast(db: &dyn ParseDb, id: EnumId) -> ParseResult<Arc<Enum>> {
+    if let ModuleItem::Enum(ast) = db.item_ast(id.into())? {
+        Ok(ast)
+    } else {
+        unreachable!()
+    }
+}
+
+fn campsite_of(db: &dyn ParseDb, module: ModId) -> CampsiteId {
+    match db.lookup_mod_decl(module) {
+        ModDecl::CampsiteRoot(campsite) => campsite,
+        ModDecl::Submod(decl) => db.campsite_of(db.lookup_item_decl(decl.id).mod_id),
+    }
+}
+
+fn mod_of(db: &dyn ParseDb, id: ItemId) -> ModId {
+    db.lookup_item_decl(id).mod_id
+}
+
+fn parent_of(db: &dyn ParseDb, module: ModId) -> Option<ModId> {
+    match db.lookup_mod_decl(module) {
+        ModDecl::CampsiteRoot(_) => None,
+        ModDecl::Submod(decl) => Some(db.mod_of(decl.id)),
+    }
+}
+
+fn is_ancestor_of(db: &dyn ParseDb, ancestor: ModId, module: ModId) -> bool {
+    if ancestor == module {
+        true
+    } else if let Some(parent) = db.parent_of(module) {
+        db.is_ancestor_of(ancestor, parent)
+    } else {
+        false
+    }
+}
+
+fn mod_name(db: &dyn ParseDb, module: ModId) -> String {
+    match db.lookup_mod_decl(module) {
+        ModDecl::CampsiteRoot(campsite) => db.campsite_name(campsite),
+        ModDecl::Submod(decl) => decl.name.ident.clone(),
+    }
+}
+
+fn item_name(db: &dyn ParseDb, id: ItemId) -> ParseResult<String> {
+    Ok(match db.item_ast(id)? {
+        ModuleItem::Mod(m) => db.mod_name(m.id),
+        ModuleItem::Extern(e) => e.name.ident.to_owned(),
+        ModuleItem::Struct(s) => s.ident.ident.to_owned(),
+        ModuleItem::Enum(e) => e.ident.ident.to_owned(),
+        ModuleItem::Fn(f) => f.sig.ident.ident.to_owned(),
+        ModuleItem::Trait(t) => t.ident.ident.to_owned(),
+        ModuleItem::Use(_) => unreachable!(),
+        ModuleItem::Impl(_) => unreachable!(),
+    })
 }

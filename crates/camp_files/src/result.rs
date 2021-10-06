@@ -17,10 +17,21 @@ pub enum FileError {
     NotUtf8(FromPathBufError),
     #[message = "Path does not exist or is not a file: {0}"]
     NotFile(Utf8PathBuf),
+    #[message = "Path is not a camp file (incorrect file extension): {0}"]
+    NotCampFile(Utf8PathBuf),
 
     /// Used by codespan
     #[render(unexpected_line_too_large)]
     LineTooLarge { given: usize, max: usize },
+
+    #[message = "Duplicate campsite name provided in arguments"]
+    #[note = "First campsite is at {path1}"]
+    #[note = "Second campsite is at {path2}"]
+    DuplicateCampsite {
+        name: String,
+        path1: Utf8PathBuf,
+        path2: Utf8PathBuf,
+    },
 }
 
 fn unexpected_line_too_large(_: &usize, _: &usize) -> Diagnostic<FileId> {
