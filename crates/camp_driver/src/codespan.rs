@@ -4,9 +4,7 @@ use camino::Utf8PathBuf;
 use camp_files::{FileId, FilesDb};
 use codespan_reporting::files::Error as CodespanError;
 
-use crate::CampDb;
-
-impl<'f> codespan_reporting::files::Files<'f> for CampDb {
+impl<'f> codespan_reporting::files::Files<'f> for crate::CampDb {
     type FileId = FileId;
     type Name = Utf8PathBuf;
     type Source = Arc<str>;

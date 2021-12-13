@@ -1,9 +1,9 @@
 #![feature(never_type)]
 
-pub mod ast;
+mod ast;
 mod parser;
 mod result;
-pub mod tok;
+mod tok;
 
 #[cfg(test)]
 mod ui_test;
@@ -11,13 +11,11 @@ mod ui_test;
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
-use camp_files::{CampsiteId, FileId};
+pub use camp_files::{CampsiteId, FileId, Span};
 use log::debug;
+pub use tok::{Ident, Lifetime};
 
-use crate::ast::{
-    Enum, EnumId, ImplItemDecl, ImplItemId, ItemDecl, ItemId, Mod, ModDecl, ModId, ModuleItem,
-    TraitItemDecl, TraitItemId,
-};
+pub use crate::ast::*;
 pub use crate::result::{ParseError, ParseResult};
 
 #[salsa::query_group(ParseStorage)]
@@ -30,7 +28,15 @@ pub trait ParseDb: camp_files::FilesDb {
 
     fn item_ast(&self, id: ItemId) -> ParseResult<ModuleItem>;
 
+    fn struct_ast(&self, id: StructId) -> ParseResult<Arc<Struct>>;
+
     fn enum_ast(&self, id: EnumId) -> ParseResult<Arc<Enum>>;
+
+    fn fn_ast(&self, id: FnId) -> ParseResult<Arc<Fun>>;
+
+    fn trait_ast(&self, id: TraitId) -> ParseResult<Arc<Trait>>;
+
+    fn impl_ast(&self, id: ImplId) -> ParseResult<Arc<Impl>>;
 
     /// Lookup id of the campsite that contains the given module
     fn campsite_of(&self, module: ModId) -> CampsiteId;
@@ -169,8 +175,40 @@ fn item_ast(db: &dyn ParseDb, id: ItemId) -> ParseResult<ModuleItem> {
     Ok(module.items[decl.idx].clone())
 }
 
+fn struct_ast(db: &dyn ParseDb, id: StructId) -> ParseResult<Arc<Struct>> {
+    if let ModuleItem::Struct(ast) = db.item_ast(id.into())? {
+        Ok(ast)
+    } else {
+        unreachable!()
+    }
+}
+
 fn enum_ast(db: &dyn ParseDb, id: EnumId) -> ParseResult<Arc<Enum>> {
     if let ModuleItem::Enum(ast) = db.item_ast(id.into())? {
+        Ok(ast)
+    } else {
+        unreachable!()
+    }
+}
+
+fn fn_ast(db: &dyn ParseDb, id: FnId) -> ParseResult<Arc<Fun>> {
+    if let ModuleItem::Fn(ast) = db.item_ast(id.into())? {
+        Ok(ast)
+    } else {
+        unreachable!()
+    }
+}
+
+fn trait_ast(db: &dyn ParseDb, id: TraitId) -> ParseResult<Arc<Trait>> {
+    if let ModuleItem::Trait(ast) = db.item_ast(id.into())? {
+        Ok(ast)
+    } else {
+        unreachable!()
+    }
+}
+
+fn impl_ast(db: &dyn ParseDb, id: ImplId) -> ParseResult<Arc<Impl>> {
+    if let ModuleItem::Impl(ast) = db.item_ast(id.into())? {
         Ok(ast)
     } else {
         unreachable!()

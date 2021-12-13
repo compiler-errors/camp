@@ -6,17 +6,20 @@ use std::sync::Arc;
 
 use camp_files::CampsiteId;
 use camp_parse::ast::{EnumId, ModId, Use as AstUse};
-use camp_parse::tok::Ident;
 use camp_parse::ParseDb;
 
 use crate::items::{CampsiteItems, Items, UnresolvedUse};
 pub use crate::items::{Item, ItemViz, Visibility};
-pub use crate::result::{ResolveError, ResolveResult};
+pub use crate::result::{
+    ResolveError, ResolveResult, UnspannedResolveError, UnspannedResolveResult,
+};
 
 #[salsa::query_group(ResolveStorage)]
 pub trait ResolveDb: ParseDb {
     // ---------------- Used during glob/import resolution ---------------- //
 
+    /// Calculate the maximum visibility that an accessor module is permitted to
+    /// see within the accessed module.
     #[salsa::invoke(resolve::max_visibility_for)]
     fn max_visibility_for(&self, accessor_module: ModId, accessed_module: ModId) -> Visibility;
 
@@ -39,42 +42,44 @@ pub trait ResolveDb: ParseDb {
         &self,
         accessor_module: ModId,
         accessed_module: ModId,
-        segment: Ident,
-    ) -> ResolveResult<Item>;
+        segment: String,
+    ) -> UnspannedResolveResult<Item>;
 }
 
-pub fn items(db: &dyn ResolveDb, module: ModId) -> ResolveResult<Items> {
-    Ok(db.campsite_items(db.campsite_of(module))?[&module].clone())
+fn items(db: &dyn ResolveDb, module: ModId) -> ResolveResult<Items> {
+    let site = db.campsite_of(module);
+    let items = db.campsite_items(site)?;
+    Ok(items[&module].clone())
 }
 
-pub fn item(
+fn item(
     db: &dyn ResolveDb,
     accessor_module: ModId,
     accessed_module: ModId,
-    segment: Ident,
-) -> ResolveResult<Item> {
-    let items = db.items(accessed_module)?;
+    segment: String,
+) -> UnspannedResolveResult<Item> {
+    let items = db
+        .items(accessed_module)
+        .map_err(UnspannedResolveError::Other)?;
 
-    if let Some(ItemViz { item, viz, span: _ }) = items.get(&segment.ident) {
+    if let Some(ItemViz { item, viz, span: _ }) = items.get(&segment) {
         let allowed_viz = db.max_visibility_for(accessor_module, accessed_module);
 
         if *viz <= allowed_viz {
             Ok(item.clone())
         } else {
-            Err(ResolveError::Visibility {
-                name: segment.ident.clone(),
+            Err(UnspannedResolveError::Visibility {
+                name: segment,
                 mod_name: db.mod_name(accessed_module),
                 kind: item.kind(),
                 visibility: *viz,
                 allowed_visibility: allowed_viz,
-                span: segment.span,
             })
         }
     } else {
-        Err(ResolveError::Missing {
-            name: segment.ident.clone(),
+        Err(UnspannedResolveError::Missing {
+            name: segment,
             module: db.mod_name(accessed_module),
-            span: segment.span,
         })
     }
 }

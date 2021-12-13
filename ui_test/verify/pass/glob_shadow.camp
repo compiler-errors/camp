@@ -1,0 +1,10 @@
+mod a {
+  pub trait B {}
+}
+
+mod b {
+  pub trait B {}
+}
+
+use a::*;
+use b::B;

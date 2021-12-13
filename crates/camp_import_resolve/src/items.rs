@@ -82,8 +82,8 @@ impl std::fmt::Display for Visibility {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Visibility::Public => write!(f, "public"),
-            Visibility::PubSite => write!(f, "public to site"),
-            Visibility::PubSuper => write!(f, "private (visible to super)"),
+            Visibility::PubSite => write!(f, "public to the campsite"),
+            Visibility::PubSuper => write!(f, "visible to super"),
             Visibility::Private => write!(f, "private"),
         }
     }

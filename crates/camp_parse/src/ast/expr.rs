@@ -3,9 +3,8 @@ use std::sync::Arc;
 use camp_files::Span;
 use derivative::Derivative;
 
-use crate::ast::{Generics, Pat, PathSegment, ReturnTy, Ty, TyElaborated};
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, ParseError, ParseResult};
+use crate::{tok, Generics, ParseError, ParseResult, Pat, PathSegment, ReturnTy, Ty, TyElaborated};
 
 #[derive(Copy, Clone)]
 pub struct ExprContext {
@@ -635,6 +634,7 @@ impl Expr {
             | Expr::While(_)
             | Expr::For(_)
             | Expr::Match(_) => false,
+
             _ => true,
         }
     }
@@ -674,21 +674,21 @@ impl Expr {
     fn span(&self) -> Span {
         match self {
             Expr::Block(e) => e.lcurly_tok.span.until(e.rcurly_tok.span),
-            Expr::Path(_) => todo!(),
-            Expr::Elaborated(_) => todo!(),
+            Expr::Path(e) => todo!(),
+            Expr::Elaborated(e) => todo!(),
             Expr::Literal(ExprLiteral::Number(n)) => n.span,
-            Expr::Group(_) => todo!(),
-            Expr::Array(_) => todo!(),
+            Expr::Group(e) => todo!(),
+            Expr::Array(e) => todo!(),
             Expr::Let(e) => e.let_tok.span.until(e.expr.span()),
-            Expr::Match(_) => todo!(),
-            Expr::If(_) => todo!(),
-            Expr::Loop(_) => todo!(),
-            Expr::While(_) => todo!(),
-            Expr::For(_) => todo!(),
-            Expr::Unary(_) => todo!(),
-            Expr::Binary(_) => todo!(),
-            Expr::RangeTrailing(_) => todo!(),
-            Expr::RangeInclusive(_) => todo!(),
+            Expr::Match(e) => todo!(),
+            Expr::If(e) => todo!(),
+            Expr::Loop(e) => todo!(),
+            Expr::While(e) => todo!(),
+            Expr::For(e) => todo!(),
+            Expr::Unary(e) => todo!(),
+            Expr::Binary(e) => todo!(),
+            Expr::RangeTrailing(e) => todo!(),
+            Expr::RangeInclusive(e) => todo!(),
             Expr::Range(_) => todo!(),
             Expr::Index(_) => todo!(),
             Expr::Call(_) => todo!(),

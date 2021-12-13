@@ -5,6 +5,7 @@ use codespan_derive::IntoDiagnostic;
 use crate::Visibility;
 
 pub type ResolveResult<T> = std::result::Result<T, ResolveError>;
+pub type UnspannedResolveResult<T> = std::result::Result<T, UnspannedResolveError>;
 
 #[derive(IntoDiagnostic, Debug, Eq, PartialEq, Clone)]
 #[file_id(FileId)]
@@ -46,13 +47,15 @@ pub enum ResolveError {
     },
 
     #[message = "Cannot reference {kind} `{name}`, because it is {visibility}"]
-    #[note = "We can only reference items that are {allowed_visibility} in module `{mod_name}`"]
+    #[note = "We can only reference items that are at least {allowed_visibility} in module \
+              `{mod_name}`"]
     Visibility {
         name: String,
         mod_name: String,
         kind: &'static str,
         visibility: Visibility,
         allowed_visibility: Visibility,
+        #[primary]
         span: Span,
     },
 
@@ -61,6 +64,25 @@ pub enum ResolveError {
         name: String,
         module: String,
         #[primary = "Referenced here"]
+        span: Span,
+    },
+
+    #[message = "Cannot glob-import from {kind} `{name}`"]
+    #[note = "The {kind} `{name}` is not a module or enum"]
+    NotAGlob {
+        kind: &'static str,
+        name: String,
+        #[primary]
+        span: Span,
+    },
+
+    #[message = "Cannot import `{child}` from {kind} `{name}`"]
+    #[note = "The {kind} `{name}` is not a module or enum"]
+    NotASource {
+        kind: &'static str,
+        name: String,
+        child: String,
+        #[primary]
         span: Span,
     },
 
@@ -79,5 +101,45 @@ impl From<FileError> for ResolveError {
 impl From<ParseError> for ResolveError {
     fn from(e: ParseError) -> Self {
         ResolveError::ParseError(e)
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum UnspannedResolveError {
+    Visibility {
+        name: String,
+        mod_name: String,
+        kind: &'static str,
+        visibility: Visibility,
+        allowed_visibility: Visibility,
+    },
+    Missing {
+        name: String,
+        module: String,
+    },
+    Other(ResolveError),
+}
+
+impl UnspannedResolveError {
+    pub fn with_span(self, span: Span) -> ResolveError {
+        match self {
+            UnspannedResolveError::Visibility {
+                name,
+                mod_name,
+                kind,
+                visibility,
+                allowed_visibility,
+            } => ResolveError::Visibility {
+                name,
+                mod_name,
+                kind,
+                visibility,
+                allowed_visibility,
+                span,
+            },
+            UnspannedResolveError::Missing { name, module } =>
+                ResolveError::Missing { name, module, span },
+            UnspannedResolveError::Other(o) => o,
+        }
     }
 }

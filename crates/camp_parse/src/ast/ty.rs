@@ -3,9 +3,8 @@ use std::sync::Arc;
 use camp_files::Span;
 use derivative::Derivative;
 
-use crate::ast::{Mutability, ReturnTy, Supertrait, Supertraits};
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, ParseResult};
+use crate::{tok, Mutability, ParseResult, ReturnTy, Supertrait, Supertraits};
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]

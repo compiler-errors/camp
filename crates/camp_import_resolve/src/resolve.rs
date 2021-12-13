@@ -10,6 +10,7 @@ use crate::items::{CampsiteItems, ItemPath, Items, UnresolvedUse};
 use crate::result::ResolveError;
 use crate::{Item, ItemViz, ResolveDb, ResolveResult, Visibility};
 
+/// See [ResolveDb::max_visibility_for]
 pub fn max_visibility_for(
     db: &dyn ResolveDb,
     accessor_module: ModId,
@@ -141,7 +142,7 @@ pub fn campsite_items(db: &dyn ResolveDb, campsite_id: CampsiteId) -> ResolveRes
 
     // Imports that are imported through a
     loop {
-        let mut remaining_unresolved = false;
+        let mut remaining_unresolved = None;
         let mut progress = false;
         let mut next_modules = btreemap![];
 
@@ -151,12 +152,12 @@ pub fn campsite_items(db: &dyn ResolveDb, campsite_id: CampsiteId) -> ResolveRes
 
             for (name, path) in &last.unresolved_uses {
                 if let Some(ItemViz { item, viz, span }) =
-                    resolve_and_validate_path(db, &modules, *module, &path)?
+                    resolve_and_validate_path(db, &modules, *module, &path, false)?
                 {
                     progress = true;
                     insert_item(&mut items, &name, span, item, viz)?;
                 } else {
-                    remaining_unresolved = true;
+                    remaining_unresolved = Some((*module, Arc::clone(path)));
                     unresolved_uses.insert(name.clone(), path.clone());
                 }
             }
@@ -165,11 +166,15 @@ pub fn campsite_items(db: &dyn ResolveDb, campsite_id: CampsiteId) -> ResolveRes
             let mut globs = vec![];
 
             for glob_path in &last.globs {
-                if let Some(item) = resolve_and_validate_path(db, &modules, *module, &glob_path)? {
+                if let Some(item) =
+                    resolve_and_validate_path(db, &modules, *module, &glob_path, false)?
+                {
+                    let new_items;
+
                     match item.item {
                         Item::Mod(glob_mod) => {
                             if let Some(glob_source) = modules.get(&glob_mod) {
-                                remaining_unresolved |= insert_items(
+                                new_items = insert_items(
                                     &mut glob_items,
                                     Iterator::chain(
                                         glob_source.items.iter(),
@@ -178,10 +183,11 @@ pub fn campsite_items(db: &dyn ResolveDb, campsite_id: CampsiteId) -> ResolveRes
                                     glob_path.viz,
                                     glob_path.span,
                                 )?;
-                                globs.push(glob_path.clone());
+                                // Re-insert the glob, since we might need to iterate later.
+                                globs.push(Arc::clone(glob_path));
                             } else {
                                 let glob_source = db.items(glob_mod)?;
-                                remaining_unresolved |= insert_items(
+                                new_items = insert_items(
                                     &mut glob_items,
                                     glob_source.iter(),
                                     glob_path.viz,
@@ -194,19 +200,33 @@ pub fn campsite_items(db: &dyn ResolveDb, campsite_id: CampsiteId) -> ResolveRes
                         },
                         Item::Enum(e) => {
                             let enum_items = db.enum_items(e)?;
-                            insert_items(
+                            new_items = insert_items(
                                 &mut glob_items,
                                 enum_items.iter(),
                                 glob_path.viz,
                                 glob_path.span,
                             )?;
                         },
-                        _ => todo!(),
+                        _ =>
+                            return Err(ResolveError::NotAGlob {
+                                span: glob_path
+                                    .segments
+                                    .last()
+                                    .map_or(glob_path.span, |ident| ident.span),
+                                kind: item.item.kind(),
+                                name: glob_path.segments.last().map_or_else(
+                                    || db.mod_name(glob_path.base),
+                                    |ident| ident.ident.to_owned(),
+                                ),
+                            }),
                     }
 
-                    progress = true;
+                    if new_items {
+                        remaining_unresolved = Some((*module, Arc::clone(glob_path)));
+                        progress = true;
+                    }
                 } else {
-                    remaining_unresolved = true;
+                    remaining_unresolved = Some((*module, Arc::clone(glob_path)));
                 }
             }
 
@@ -220,12 +240,16 @@ pub fn campsite_items(db: &dyn ResolveDb, campsite_id: CampsiteId) -> ResolveRes
 
         modules = next_modules;
 
-        if !remaining_unresolved {
+        if let Some((accessor_module, path)) = remaining_unresolved {
+            if !progress {
+                let err = resolve_and_validate_path(db, &modules, accessor_module, &path, true)
+                    .expect_err(
+                        " This module should still be unresolved, otherwise why did we give up?",
+                    );
+                return Err(err);
+            }
+        } else {
             break;
-        }
-
-        if !progress {
-            todo!();
         }
     }
 
@@ -389,15 +413,22 @@ fn resolve_and_validate_path(
     campsite_items: &BTreeMap<ModId, EarlyItems>,
     accessor_module: ModId,
     path: &ItemPath,
+    strict: bool,
 ) -> ResolveResult<Option<ItemViz>> {
     let mut current_item = Item::Mod(path.base);
+    let mut current_item_span = path.span;
+    let mut current_item_name = None;
 
     for segment in &path.segments {
         match &current_item {
             Item::Mod(accessed_module) => {
                 if db.campsite_of(*accessed_module) != db.campsite_of(accessor_module) {
                     // This is a foreign module, simple check.
-                    current_item = db.item(accessor_module, *accessed_module, segment.clone())?;
+                    current_item = db
+                        .item(accessor_module, *accessed_module, segment.ident.clone())
+                        .map_err(|e| e.with_span(segment.span))?;
+                    current_item_span = segment.span;
+                    current_item_name = Some(&segment.ident);
                     continue;
                 }
 
@@ -406,7 +437,15 @@ fn resolve_and_validate_path(
 
                 if item_viz.is_none() {
                     if early_items.unresolved_uses.contains_key(&segment.ident) {
-                        return Ok(None);
+                        if strict {
+                            return Err(ResolveError::Missing {
+                                name: segment.ident.clone(),
+                                module: db.mod_name(*accessed_module),
+                                span: segment.span,
+                            });
+                        } else {
+                            return Ok(None);
+                        }
                     }
 
                     item_viz = early_items.glob_items.get(&segment.ident);
@@ -417,6 +456,8 @@ fn resolve_and_validate_path(
 
                     if *viz <= allowed_viz {
                         current_item = item.clone();
+                        current_item_span = segment.span;
+                        current_item_name = Some(&segment.ident);
                     } else {
                         return Err(ResolveError::Visibility {
                             name: segment.ident.clone(),
@@ -434,7 +475,15 @@ fn resolve_and_validate_path(
                         span: segment.span,
                     });
                 } else {
-                    return Ok(None);
+                    if strict {
+                        return Err(ResolveError::Missing {
+                            name: segment.ident.clone(),
+                            module: db.mod_name(*accessed_module),
+                            span: segment.span,
+                        });
+                    } else {
+                        return Ok(None);
+                    }
                 }
             },
             Item::Enum(id) => {
@@ -442,13 +491,15 @@ fn resolve_and_validate_path(
                 let item_viz = enum_items.get(&segment.ident);
 
                 // Privacy is calculated w.r.t. the module this enum is contained in
-                let accessed_module = db.mod_of(id.into());
+                let accessed_module = db.mod_of((*id).into());
 
                 if let Some(ItemViz { item, viz, span: _ }) = item_viz {
                     let allowed_viz = db.max_visibility_for(accessor_module, accessed_module);
 
                     if *viz <= allowed_viz {
                         current_item = item.clone();
+                        current_item_span = segment.span;
+                        current_item_name = Some(&segment.ident);
                     } else {
                         return Err(ResolveError::Visibility {
                             name: segment.ident.clone(),
@@ -467,13 +518,21 @@ fn resolve_and_validate_path(
                     });
                 }
             },
-            _ => todo!(),
+            _ =>
+                return Err(ResolveError::NotASource {
+                    span: current_item_span,
+                    kind: current_item.kind(),
+                    name: current_item_name.unwrap().to_owned(),
+                    child: segment.ident.to_owned(),
+                }),
         }
     }
 
-    // Check module can access whole path
-    // Re-export path thru
-    todo!()
+    Ok(Some(ItemViz {
+        item: current_item,
+        viz: path.viz,
+        span: path.span,
+    }))
 }
 
 fn insert_items<'a>(

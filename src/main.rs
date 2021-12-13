@@ -86,7 +86,9 @@ fn main() {
         };
         let mut writer = StandardStream::stderr(color);
         let config = codespan_reporting::term::Config::default();
+
         codespan_reporting::term::emit(&mut writer, &config, &db, &err.into_diagnostic()).unwrap();
+
         // Exit with code 1
         std::process::exit(1);
     }

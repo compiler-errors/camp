@@ -104,9 +104,9 @@ impl Parse for Mutability {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct GenericsDecl {
-    lt_tok: tok::Lt,
-    generics: Punctuated<GenericDecl, tok::Comma>,
-    gt_tok: tok::Gt,
+    pub lt_tok: tok::Lt,
+    pub generics: Punctuated<GenericDecl, tok::Comma>,
+    pub gt_tok: tok::Gt,
 }
 
 impl Parse for GenericsDecl {
@@ -151,7 +151,7 @@ impl ShouldParse for GenericsDecl {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-enum GenericDecl {
+pub enum GenericDecl {
     Lifetime(GenericLifetime),
     Ident(GenericType),
 }
@@ -171,9 +171,9 @@ impl Parse for GenericDecl {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-struct GenericLifetime {
-    lifetime: tok::Lifetime,
-    maybe_bounds: Option<Supertraits>,
+pub struct GenericLifetime {
+    pub lifetime: tok::Lifetime,
+    pub maybe_bounds: Option<Supertraits>,
 }
 
 impl Parse for GenericLifetime {
@@ -188,9 +188,9 @@ impl Parse for GenericLifetime {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-struct GenericType {
-    ident: tok::Ident,
-    maybe_bounds: Option<Supertraits>,
+pub struct GenericType {
+    pub ident: tok::Ident,
+    pub maybe_bounds: Option<Supertraits>,
 }
 
 impl Parse for GenericType {
@@ -206,8 +206,8 @@ impl Parse for GenericType {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Supertraits {
-    colon_tok: tok::Colon,
-    traits: Punctuated<Supertrait, tok::Plus>,
+    pub colon_tok: tok::Colon,
+    pub traits: Punctuated<Supertrait, tok::Plus>,
 }
 
 impl Supertraits {

@@ -1,0 +1,15 @@
+mod A {
+    pub(super) struct T;
+}
+
+mod B {
+    pub(super) use super::A::*;
+}
+
+mod C {
+    pub(super) use super::B::*;
+}
+
+mod D {
+    pub(super) use super::C::T;
+}

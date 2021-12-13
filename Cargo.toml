@@ -2,6 +2,7 @@
 name = "camp"
 version = "0.1.0"
 edition = "2018"
+exclude = ["ui_test", "std"]
 
 [workspace]
 members = [
@@ -11,6 +12,7 @@ members = [
     "crates/camp_lex",
     "crates/camp_parse",
     "crates/camp_import_resolve",
+    "crates/camp_hir",
 ]
 
 [dependencies]
@@ -19,6 +21,6 @@ camp_driver = { path = "crates/camp_driver" }
 codespan-derive = "0.1.1"
 codespan-reporting = "0.11.1"
 log = "0.4.14"
-structopt = "0.3.23"
+structopt = "0.3.25"
 termcolor = "1.1.2"
 env_logger = "0.9.0"

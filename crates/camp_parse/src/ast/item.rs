@@ -5,12 +5,11 @@ use camp_util::{id_type, wrapper_id_type};
 use derivative::Derivative;
 
 use super::ReferencePrefix;
-use crate::ast::{
-    Expr, ExprContext, GenericsDecl, Pat, PathSegment, ReturnTy, Supertraits, TraitGenerics,
-    TraitTy, TraitTyPath, Ty, TyPath, Visibility,
-};
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, ParseDb, ParseError, ParseResult};
+use crate::{
+    tok, Expr, ExprContext, GenericsDecl, ParseDb, ParseError, ParseResult, Pat, PathSegment,
+    ReturnTy, Supertraits, TraitGenerics, TraitTy, TraitTyPath, Ty, TyPath, Visibility,
+};
 
 id_type!(pub ModId);
 
@@ -458,8 +457,8 @@ impl ShouldParse for WhereClause {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TypeRestriction {
-    ty: Ty,
-    trailing_traits: Supertraits,
+    pub subject: TyOrLifetime,
+    pub trailing_traits: Supertraits,
 }
 
 impl Parse for TypeRestriction {
@@ -467,8 +466,26 @@ impl Parse for TypeRestriction {
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
         Ok(TypeRestriction {
-            ty: input.parse()?,
+            subject: input.parse()?,
             trailing_traits: input.parse()?,
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum TyOrLifetime {
+    Ty(Ty),
+    Lifetime(tok::Lifetime),
+}
+
+impl Parse for TyOrLifetime {
+    type Context = ();
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+        Ok(if input.peek::<tok::Lifetime>() {
+            TyOrLifetime::Lifetime(input.parse()?)
+        } else {
+            TyOrLifetime::Ty(input.parse()?)
         })
     }
 }

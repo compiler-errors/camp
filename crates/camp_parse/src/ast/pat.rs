@@ -1,8 +1,7 @@
 use derivative::Derivative;
 
-use crate::ast::Generics;
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, ParseError, ParseResult};
+use crate::{tok, Generics, ParseError, ParseResult};
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]

@@ -39,7 +39,7 @@ impl<T, S> Punctuated<T, S> {
     }
 
     pub fn unwrap_one(self) -> T {
-        assert!(self.items.is_empty());
+        assert_eq!(self.items.len(), 1);
         *self.last.unwrap()
     }
 
@@ -67,7 +67,7 @@ impl<T, S> Punctuated<T, S> {
         self.items
             .iter()
             .map(|(t, _)| t)
-            .chain(self.last.iter().map(|t| t.as_ref()))
+            .chain(self.last.as_deref())
     }
 
     pub fn into_items(self) -> impl Iterator<Item = T> {

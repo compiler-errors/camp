@@ -9,3 +9,6 @@ lazy_static = "1.4.0"
 log = "0.4.14"
 termcolor = "1.1.2"
 codespan-derive = "0.1.1"
+
+[dev-dependencies]
+salsa = "0.16.1"
