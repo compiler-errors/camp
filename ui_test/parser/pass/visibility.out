@@ -1,7 +1,8 @@
 Mod {
     items: [
-        Fun {
+        Function {
             sig: Signature {
+                attrs: [],
                 viz: Pub(
                     Pub,
                     Some(
@@ -35,8 +36,9 @@ Mod {
                 rcurly_tok: RCurly,
             },
         },
-        Fun {
+        Function {
             sig: Signature {
+                attrs: [],
                 viz: Pub(
                     Pub,
                     None,

@@ -1,10 +1,9 @@
-use camp_files::{FileError, FileId, Span};
-use camp_parse::ParseError;
+use camp_parse::{CampError, FileId, Span};
+use camp_util::IntoCampError;
 use codespan_derive::IntoDiagnostic;
 
 use crate::Visibility;
 
-pub type ResolveResult<T> = std::result::Result<T, ResolveError>;
 pub type UnspannedResolveResult<T> = std::result::Result<T, UnspannedResolveError>;
 
 #[derive(IntoDiagnostic, Debug, Eq, PartialEq, Clone)]
@@ -85,23 +84,6 @@ pub enum ResolveError {
         #[primary]
         span: Span,
     },
-
-    #[render(FileError::into_diagnostic)]
-    FileError(FileError),
-    #[render(ParseError::into_diagnostic)]
-    ParseError(ParseError),
-}
-
-impl From<FileError> for ResolveError {
-    fn from(e: FileError) -> Self {
-        ResolveError::FileError(e)
-    }
-}
-
-impl From<ParseError> for ResolveError {
-    fn from(e: ParseError) -> Self {
-        ResolveError::ParseError(e)
-    }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -117,11 +99,11 @@ pub enum UnspannedResolveError {
         name: String,
         module: String,
     },
-    Other(ResolveError),
+    Other(CampError),
 }
 
 impl UnspannedResolveError {
-    pub fn with_span(self, span: Span) -> ResolveError {
+    pub fn with_span(self, span: Span) -> CampError {
         match self {
             UnspannedResolveError::Visibility {
                 name,
@@ -136,10 +118,15 @@ impl UnspannedResolveError {
                 visibility,
                 allowed_visibility,
                 span,
-            },
+            }
+            .into(),
             UnspannedResolveError::Missing { name, module } =>
-                ResolveError::Missing { name, module, span },
+                ResolveError::Missing { name, module, span }.into(),
             UnspannedResolveError::Other(o) => o,
         }
     }
+}
+
+impl IntoCampError for ResolveError {
+    type Id = FileId;
 }

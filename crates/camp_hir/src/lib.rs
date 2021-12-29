@@ -1,34 +1,42 @@
 mod hir;
-mod item;
-mod resolve;
+mod lang_item;
+mod resolver;
 mod result;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use camp_parse::CampsiteId;
-pub use hir::*;
-pub use result::{LoweringError, LoweringResult};
+use camp_import_resolve::Item;
+use camp_parse::{CampResult, CampsiteId, EnumId, FunctionId, ImplId, ModId, StructId, TraitId};
+use camp_util::id_type;
+
+pub use crate::hir::*;
+pub use crate::result::LoweringError;
+
+id_type!(pub StringId);
 
 #[salsa::query_group(HirStorage)]
 pub trait HirDb: camp_parse::ParseDb {
-    #[salsa::invoke(item::mod_hir)]
-    fn campsite_hir(&self, id: CampsiteId) -> LoweringResult<Arc<Mod>>;
+    #[salsa::interned]
+    fn string(&self, s: String) -> StringId;
 
-    #[salsa::invoke(item::mod_hir)]
-    fn mod_hir(&self, id: ModId) -> LoweringResult<Arc<Mod>>;
+    #[salsa::invoke(lang_item::lang_items)]
+    fn lang_items(&self) -> CampResult<Arc<HashMap<String, Item>>>;
 
-    #[salsa::invoke(item::mod_hir)]
-    fn struct_hir(&self, id: StructId) -> LoweringResult<Arc<Struct>>;
+    #[salsa::invoke(lang_item::lang_item)]
+    fn lang_item(&self, s: String, span: Span) -> CampResult<Item>;
 
-    #[salsa::invoke(item::mod_hir)]
-    fn enum_hir(&self, id: EnumId) -> LoweringResult<Arc<Enum>>;
+    fn campsite_hir(&self, id: CampsiteId) -> CampResult<Arc<Mod>>;
 
-    #[salsa::invoke(item::mod_hir)]
-    fn function_hir(&self, id: FnId) -> LoweringResult<Arc<Function>>;
+    fn mod_hir(&self, id: ModId) -> CampResult<Arc<Mod>>;
 
-    #[salsa::invoke(item::mod_hir)]
-    fn trait_hir(&self, id: TraitId) -> LoweringResult<Arc<Trait>>;
+    fn struct_hir(&self, id: StructId) -> CampResult<Arc<Struct>>;
 
-    #[salsa::invoke(item::mod_hir)]
-    fn impl_hir(&self, id: ImplId) -> LoweringResult<Arc<Impl>>;
+    fn enum_hir(&self, id: EnumId) -> CampResult<Arc<Enum>>;
+
+    fn function_hir(&self, id: FunctionId) -> CampResult<Arc<Function>>;
+
+    fn trait_hir(&self, id: TraitId) -> CampResult<Arc<Trait>>;
+
+    fn impl_hir(&self, id: ImplId) -> CampResult<Arc<Impl>>;
 }

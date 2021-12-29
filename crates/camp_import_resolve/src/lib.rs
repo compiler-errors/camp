@@ -4,15 +4,11 @@ mod result;
 
 use std::sync::Arc;
 
-use camp_files::CampsiteId;
-use camp_parse::ast::{EnumId, ModId, Use as AstUse};
-use camp_parse::ParseDb;
+use camp_parse::{CampResult, CampsiteId, EnumId, ModId, ParseDb, Use as AstUse};
 
 use crate::items::{CampsiteItems, Items, UnresolvedUse};
 pub use crate::items::{Item, ItemViz, Visibility};
-pub use crate::result::{
-    ResolveError, ResolveResult, UnspannedResolveError, UnspannedResolveResult,
-};
+pub use crate::result::{ResolveError, UnspannedResolveError, UnspannedResolveResult};
 
 #[salsa::query_group(ResolveStorage)]
 pub trait ResolveDb: ParseDb {
@@ -24,15 +20,15 @@ pub trait ResolveDb: ParseDb {
     fn max_visibility_for(&self, accessor_module: ModId, accessed_module: ModId) -> Visibility;
 
     #[salsa::invoke(resolve::lower_use)]
-    fn lower_use(&self, u: Arc<AstUse>, module: ModId) -> ResolveResult<UnresolvedUse>;
+    fn lower_use(&self, u: Arc<AstUse>, module: ModId) -> CampResult<UnresolvedUse>;
 
     #[salsa::invoke(resolve::campsite_items)]
-    fn campsite_items(&self, campsite_id: CampsiteId) -> ResolveResult<CampsiteItems>;
+    fn campsite_items(&self, campsite_id: CampsiteId) -> CampResult<CampsiteItems>;
 
-    fn items(&self, module: ModId) -> ResolveResult<Items>;
+    fn items(&self, module: ModId) -> CampResult<Items>;
 
     #[salsa::invoke(resolve::enum_items)]
-    fn enum_items(&self, e: EnumId) -> ResolveResult<Items>;
+    fn enum_items(&self, e: EnumId) -> CampResult<Items>;
 
     // ------------------ "Public" API for lowering paths ------------------ //
 
@@ -46,7 +42,7 @@ pub trait ResolveDb: ParseDb {
     ) -> UnspannedResolveResult<Item>;
 }
 
-fn items(db: &dyn ResolveDb, module: ModId) -> ResolveResult<Items> {
+fn items(db: &dyn ResolveDb, module: ModId) -> CampResult<Items> {
     let site = db.campsite_of(module);
     let items = db.campsite_items(site)?;
     Ok(items[&module].clone())

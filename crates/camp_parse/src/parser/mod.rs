@@ -4,13 +4,13 @@ mod tok_macros;
 
 use std::sync::Arc;
 
-use camp_files::Span;
 use camp_lex::tok::{self as lex, Token as LexToken};
 use camp_lex::LexBuffer;
+use camp_util::bail;
 pub use punctuated::Punctuated;
 
 use crate::tok::{LCurly, LParen, LSq, RCurly, RParen, RSq};
-use crate::{ParseDb, ParseError, ParseResult};
+use crate::{CampResult, ParseDb, ParseError, Span};
 
 #[derive(Clone)]
 pub struct ParseBuffer<'p> {
@@ -85,18 +85,15 @@ impl<'p> ParseBuffer<'p> {
         }
     }
 
-    pub fn parse<T: Parse<Context = ()>>(&mut self) -> ParseResult<T> {
+    pub fn parse<T: Parse<Context = ()>>(&mut self) -> CampResult<T> {
         T::parse_with(self, ())
     }
 
-    pub fn parse_with<T: Parse>(&mut self, ctx: T::Context) -> ParseResult<T> {
+    pub fn parse_with<T: Parse>(&mut self, ctx: T::Context) -> CampResult<T> {
         T::parse_with(self, ctx)
     }
 
-    pub fn parse_punctuated<Item, Sep, End>(
-        self,
-        end_tok: End,
-    ) -> ParseResult<Punctuated<Item, Sep>>
+    pub fn parse_punctuated<Item, Sep, End>(self, end_tok: End) -> CampResult<Punctuated<Item, Sep>>
     where
         Item: Parse<Context = ()>,
         Sep: Parse<Context = ()>,
@@ -109,7 +106,7 @@ impl<'p> ParseBuffer<'p> {
         mut self,
         item_ctx: Item::Context,
         _end_tok: End,
-    ) -> ParseResult<Punctuated<Item, Sep>>
+    ) -> CampResult<Punctuated<Item, Sep>>
     where
         Item: Parse,
         Item::Context: Copy,
@@ -137,7 +134,7 @@ impl<'p> ParseBuffer<'p> {
         Ok(ret)
     }
 
-    pub fn expect_empty<EndTok: Peek>(mut self, _end_tok: EndTok) -> ParseResult<()> {
+    pub fn expect_empty<EndTok: Peek>(mut self, _end_tok: EndTok) -> CampResult<()> {
         if self.peek_tok().is_some() {
             self.also_expect::<EndTok>();
             self.error_exhausted()?;
@@ -146,7 +143,7 @@ impl<'p> ParseBuffer<'p> {
         }
     }
 
-    pub fn error_exhausted(&mut self) -> ParseResult<!> {
+    pub fn error_exhausted(&mut self) -> CampResult<!> {
         let mut expected = String::new();
 
         for (i, tok) in self.expected.iter().enumerate() {
@@ -163,7 +160,7 @@ impl<'p> ParseBuffer<'p> {
             expected.push_str(*tok);
         }
 
-        Err(ParseError::ExpectedTokens(self.next_span(), expected))
+        bail!(ParseError::ExpectedTokens(self.next_span(), expected));
     }
 
     pub fn is_empty(&self) -> bool {
@@ -181,13 +178,13 @@ impl<'p> ParseBuffer<'p> {
 pub trait Parse: Sized {
     type Context;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: Self::Context) -> ParseResult<Self>;
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: Self::Context) -> CampResult<Self>;
 }
 
 impl<T: Parse> Parse for Box<T> {
     type Context = T::Context;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: Self::Context) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: Self::Context) -> CampResult<Self> {
         T::parse_with(input, ctx).map(Box::new)
     }
 }
@@ -195,7 +192,7 @@ impl<T: Parse> Parse for Box<T> {
 impl<T: Parse> Parse for Arc<T> {
     type Context = T::Context;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: Self::Context) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: Self::Context) -> CampResult<Self> {
         T::parse_with(input, ctx).map(Arc::new)
     }
 }
@@ -213,7 +210,7 @@ impl<T: Peek + Parse> ShouldParse for T {
 impl<T: ShouldParse> Parse for Option<T> {
     type Context = T::Context;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: Self::Context) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: Self::Context) -> CampResult<Self> {
         if T::should_parse(input) {
             Ok(Some(T::parse_with(input, ctx)?))
         } else {

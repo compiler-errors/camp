@@ -1,11 +1,15 @@
+mod attr;
 mod expr;
+mod function;
 mod item;
-mod misc;
 mod pat;
+mod path;
 mod ty;
 
+pub use attr::*;
 pub use expr::*;
+pub use function::*;
 pub use item::*;
-pub use misc::*;
 pub use pat::*;
+pub use path::*;
 pub use ty::*;

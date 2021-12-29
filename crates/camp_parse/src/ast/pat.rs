@@ -1,7 +1,8 @@
+use camp_util::bail;
 use derivative::Derivative;
 
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, Generics, ParseError, ParseResult};
+use crate::{tok, CampResult, Generics, ParseError};
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]
@@ -27,7 +28,7 @@ pub enum Pat {
 impl Parse for Pat {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let mut pats = Punctuated::new();
 
         loop {
@@ -49,7 +50,7 @@ impl Parse for Pat {
 }
 
 impl Pat {
-    fn pat_alternative(input: &mut ParseBuffer<'_>) -> ParseResult<Pat> {
+    fn pat_alternative(input: &mut ParseBuffer<'_>) -> CampResult<Pat> {
         // this peek will cover ..= and ... as well
         Ok(if input.peek::<tok::DotDot>() {
             Pat::pat_range(input, None)?
@@ -63,7 +64,7 @@ impl Pat {
         })
     }
 
-    fn pat_range(input: &mut ParseBuffer<'_>, left: Option<Box<Pat>>) -> ParseResult<Pat> {
+    fn pat_range(input: &mut ParseBuffer<'_>, left: Option<Box<Pat>>) -> CampResult<Pat> {
         let right = if input.peek::<tok::DotDotDot>() {
             RangeEnding::Open(input.parse()?)
         } else if input.peek::<tok::DotDotEq>() {
@@ -77,7 +78,7 @@ impl Pat {
         Ok(Pat::Range(PatRange { left, right }))
     }
 
-    fn pat_simple(input: &mut ParseBuffer<'_>) -> ParseResult<Pat> {
+    fn pat_simple(input: &mut ParseBuffer<'_>) -> CampResult<Pat> {
         Ok(if input.peek::<tok::Underscore>() {
             Pat::Underscore(input.parse()?)
         } else if input.peek::<tok::Number>() {
@@ -93,7 +94,7 @@ impl Pat {
         })
     }
 
-    fn pat_ident(input: &mut ParseBuffer<'_>) -> ParseResult<Pat> {
+    fn pat_ident(input: &mut ParseBuffer<'_>) -> CampResult<Pat> {
         let mut_tok = input.parse()?;
         let mut path = Punctuated::new();
 
@@ -124,7 +125,7 @@ impl Pat {
             Pat::Path(PatPath { mut_tok, path })
         } else {
             if let Some(mut_tok) = mut_tok {
-                return Err(ParseError::UnexpectedMut(mut_tok.span));
+                bail!(ParseError::UnexpectedMut(mut_tok.span));
             }
 
             Pat::Struct(PatStruct {
@@ -177,7 +178,7 @@ pub struct PatGroup {
 impl Parse for PatGroup {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
         Ok(PatGroup {
@@ -208,7 +209,7 @@ pub enum PatFields {
 impl Parse for PatFields {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(if input.peek::<tok::LCurly>() {
             PatFields::Named(input.parse()?)
         } else if input.peek::<tok::LParen>() {
@@ -229,7 +230,7 @@ pub struct FieldsNamed {
 impl Parse for FieldsNamed {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let (lcurly_tok, contents, rcurly_tok) = input.parse_between_curlys()?;
 
         Ok(FieldsNamed {
@@ -249,7 +250,7 @@ pub struct FieldNamed {
 impl Parse for FieldNamed {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(FieldNamed {
             ident: input.parse()?,
             pat: input.parse()?,
@@ -266,7 +267,7 @@ pub struct NamedEnding {
 impl Parse for NamedEnding {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(NamedEnding {
             colon_tok: input.parse()?,
             pat: input.parse()?,
@@ -290,7 +291,7 @@ pub struct FieldsPositional {
 impl Parse for FieldsPositional {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
         Ok(FieldsPositional {
@@ -311,7 +312,7 @@ pub struct PatArray {
 impl Parse for PatArray {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let (lsq_tok, contents, rsq_tok) = input.parse_between_sqs()?;
 
         Ok(PatArray {

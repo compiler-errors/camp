@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
-use camp_files::Span;
 use derivative::Derivative;
 
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, Mutability, ParseResult, ReturnTy, Supertrait, Supertraits};
+use crate::{tok, CampResult, Mutability, ReturnTy, Span};
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]
@@ -36,7 +35,7 @@ pub enum Ty {
 }
 
 impl Ty {
-    fn non_assoc(input: &mut ParseBuffer<'_>) -> ParseResult<Self> {
+    fn non_assoc(input: &mut ParseBuffer<'_>) -> CampResult<Self> {
         Ok(if input.peek::<tok::Lt>() {
             Ty::Elaborated(input.parse()?)
         } else if input.peek::<tok::LParen>() {
@@ -93,7 +92,7 @@ impl Ty {
             Ty::Dyn(t) => t
                 .dyn_tok
                 .span
-                .until(t.trait_tys.last().expect("At least one trait ty").span()),
+                .until(t.supertraits.last().expect("At least one trait ty").span()),
             Ty::SelfTy(t) => t.span,
         }
     }
@@ -116,7 +115,7 @@ impl Ty {
 impl Parse for Ty {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let mut ty = Ty::non_assoc(input)?;
 
         while ty.is_associable() && input.peek::<tok::ColonColon>() {
@@ -136,16 +135,16 @@ impl Parse for Ty {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TyElaborated {
-    lt_tok: tok::Lt,
-    ty: Arc<Ty>,
-    as_trait: Option<AsTrait>,
-    gt_tok: tok::Gt,
+    pub lt_tok: tok::Lt,
+    pub ty: Arc<Ty>,
+    pub as_trait: Option<AsTrait>,
+    pub gt_tok: tok::Gt,
 }
 
 impl Parse for TyElaborated {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(TyElaborated {
             lt_tok: input.parse()?,
             ty: input.parse()?,
@@ -157,14 +156,14 @@ impl Parse for TyElaborated {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct AsTrait {
-    as_tok: tok::As,
-    trait_ty: TraitTy,
+    pub as_tok: tok::As,
+    pub trait_ty: TraitTy,
 }
 
 impl Parse for AsTrait {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(AsTrait {
             as_tok: input.parse()?,
             trait_ty: input.parse()?,
@@ -180,22 +179,22 @@ impl ShouldParse for AsTrait {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TyAssoc {
-    ty: Arc<Ty>,
-    colon_colon_tok: tok::ColonColon,
-    ident: tok::Ident,
+    pub ty: Arc<Ty>,
+    pub colon_colon_tok: tok::ColonColon,
+    pub ident: tok::Ident,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TyGroup {
-    lparen_tok: tok::LParen,
-    tys: Punctuated<Ty, tok::Comma>,
-    rparen_tok: tok::RParen,
+    pub lparen_tok: tok::LParen,
+    pub tys: Punctuated<Ty, tok::Comma>,
+    pub rparen_tok: tok::RParen,
 }
 
 impl Parse for TyGroup {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
         Ok(TyGroup {
@@ -208,16 +207,16 @@ impl Parse for TyGroup {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TyArray {
-    lsq_tok: tok::LSq,
-    ty: Arc<Ty>,
-    size: Option<ArraySize>,
-    rsq_tok: tok::RSq,
+    pub lsq_tok: tok::LSq,
+    pub ty: Arc<Ty>,
+    pub size: Option<ArraySize>,
+    pub rsq_tok: tok::RSq,
 }
 
 impl Parse for TyArray {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let (lsq_tok, mut contents, rsq_tok) = input.parse_between_sqs()?;
         let arr = TyArray {
             lsq_tok,
@@ -233,14 +232,14 @@ impl Parse for TyArray {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ArraySize {
-    semicolon_tok: tok::Semicolon,
-    size: tok::Number,
+    pub semicolon_tok: tok::Semicolon,
+    pub size: tok::Number,
 }
 
 impl Parse for ArraySize {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(ArraySize {
             semicolon_tok: input.parse()?,
             size: input.parse()?,
@@ -256,15 +255,15 @@ impl ShouldParse for ArraySize {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TyPointer {
-    star_tok: tok::Star,
-    mutability: Mutability,
-    ty: Arc<Ty>,
+    pub star_tok: tok::Star,
+    pub mutability: Mutability,
+    pub ty: Arc<Ty>,
 }
 
 impl Parse for TyPointer {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(TyPointer {
             star_tok: input.parse()?,
             mutability: input.parse()?,
@@ -275,14 +274,14 @@ impl Parse for TyPointer {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TyReference {
-    prefix: ReferencePrefix,
-    ty: Arc<Ty>,
+    pub prefix: ReferencePrefix,
+    pub ty: Arc<Ty>,
 }
 
 impl Parse for TyReference {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(TyReference {
             prefix: input.parse()?,
             ty: input.parse()?,
@@ -292,15 +291,15 @@ impl Parse for TyReference {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ReferencePrefix {
-    amp_tok: tok::Amp,
-    lifetime: Option<tok::Lifetime>,
-    mutability: Mutability,
+    pub amp_tok: tok::Amp,
+    pub lifetime: Option<tok::Lifetime>,
+    pub mutability: Mutability,
 }
 
 impl Parse for ReferencePrefix {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(ReferencePrefix {
             amp_tok: input.parse()?,
             lifetime: input.parse()?,
@@ -311,13 +310,13 @@ impl Parse for ReferencePrefix {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TyInfer {
-    underscore_tok: tok::Underscore,
+    pub underscore_tok: tok::Underscore,
 }
 
 impl Parse for TyInfer {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(TyInfer {
             underscore_tok: input.parse()?,
         })
@@ -326,13 +325,13 @@ impl Parse for TyInfer {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TyNever {
-    bang_tok: tok::Bang,
+    pub bang_tok: tok::Bang,
 }
 
 impl Parse for TyNever {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(TyNever {
             bang_tok: input.parse()?,
         })
@@ -348,7 +347,7 @@ pub struct TyPath {
 impl Parse for TyPath {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let mut path = Punctuated::new();
 
         loop {
@@ -386,7 +385,7 @@ pub struct Generics {
 impl Parse for Generics {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let lt_tok = input.parse()?;
         let mut generics = Punctuated::new();
 
@@ -427,7 +426,7 @@ pub enum Generic {
 impl Parse for Generic {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         if input.peek::<tok::Lifetime>() {
             Ok(Generic::Lifetime(input.parse()?))
         } else {
@@ -448,7 +447,7 @@ pub struct TyFn {
 impl Parse for TyFn {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let fn_tok = input.parse()?;
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
@@ -464,26 +463,29 @@ impl Parse for TyFn {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TyDyn {
-    dyn_tok: tok::Dyn,
-    trait_tys: Punctuated<Supertrait, tok::Plus>,
+    pub dyn_tok: tok::Dyn,
+    pub supertraits: Punctuated<Supertrait, tok::Plus>,
 }
 
 impl Parse for TyDyn {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let dyn_tok = input.parse()?;
-        let trait_tys;
+        let supertraits;
 
         if input.peek::<tok::LParen>() {
             let (_, mut contents, rparen_tok) = input.parse_between_parens()?;
-            trait_tys = Supertraits::parse_supertrait_list(&mut contents)?;
+            supertraits = Supertraits::parse_supertrait_list(&mut contents)?;
             contents.expect_empty(rparen_tok)?;
         } else {
-            trait_tys = Supertraits::parse_supertrait_list(input)?;
+            supertraits = Supertraits::parse_supertrait_list(input)?;
         }
 
-        Ok(TyDyn { dyn_tok, trait_tys })
+        Ok(TyDyn {
+            dyn_tok,
+            supertraits,
+        })
     }
 }
 
@@ -522,7 +524,7 @@ impl TraitTy {
 impl Parse for TraitTy {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         if input.peek::<tok::CFn>() || input.peek::<tok::CFnMut>() || input.peek::<tok::CFnOnce>() {
             Ok(TraitTy::Fn(input.parse()?))
         } else {
@@ -540,7 +542,7 @@ pub struct TraitTyPath {
 impl Parse for TraitTyPath {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let mut path = Punctuated::new();
 
         loop {
@@ -570,15 +572,15 @@ impl Parse for TraitTyPath {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TraitGenerics {
-    lt_tok: tok::Lt,
-    generics: Punctuated<TraitGeneric, tok::Comma>,
-    gt_tok: tok::Gt,
+    pub lt_tok: tok::Lt,
+    pub generics: Punctuated<TraitGeneric, tok::Comma>,
+    pub gt_tok: tok::Gt,
 }
 
 impl Parse for TraitGenerics {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let lt_tok = input.parse()?;
         let mut generics = Punctuated::new();
 
@@ -637,7 +639,7 @@ pub enum TraitGeneric {
 impl Parse for TraitGeneric {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         if input.peek::<tok::Lifetime>() {
             Ok(TraitGeneric::Lifetime(input.parse()?))
         } else if input.peek::<tok::Ident>() && input.peek2::<tok::Eq>() {
@@ -650,15 +652,15 @@ impl Parse for TraitGeneric {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Binding {
-    ident: tok::Ident,
-    eq_tok: tok::Eq,
-    ty: Ty,
+    pub ident: tok::Ident,
+    pub eq_tok: tok::Eq,
+    pub ty: Ty,
 }
 
 impl Parse for Binding {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(Binding {
             ident: input.parse()?,
             eq_tok: input.parse()?,
@@ -678,17 +680,17 @@ impl From<Generic> for TraitGeneric {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TraitTyFn {
-    fn_kind: FnKind,
-    lparen_tok: tok::LParen,
-    param_tys: Punctuated<Ty, tok::Comma>,
-    rparen_tok: tok::RParen,
-    return_ty: Option<ReturnTy>,
+    pub fn_kind: FnTraitKind,
+    pub lparen_tok: tok::LParen,
+    pub param_tys: Punctuated<Ty, tok::Comma>,
+    pub rparen_tok: tok::RParen,
+    pub return_ty: Option<ReturnTy>,
 }
 
 impl Parse for TraitTyFn {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let fn_kind = input.parse()?;
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
@@ -703,34 +705,104 @@ impl Parse for TraitTyFn {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub enum FnKind {
+pub enum FnTraitKind {
     Fn(tok::CFn),
     FnMut(tok::CFnMut),
     FnOnce(tok::CFnOnce),
 }
 
-impl FnKind {
+impl FnTraitKind {
     fn span(&self) -> Span {
         match self {
-            FnKind::Fn(t) => t.span,
-            FnKind::FnMut(t) => t.span,
-            FnKind::FnOnce(t) => t.span,
+            FnTraitKind::Fn(t) => t.span,
+            FnTraitKind::FnMut(t) => t.span,
+            FnTraitKind::FnOnce(t) => t.span,
         }
     }
 }
 
-impl Parse for FnKind {
+impl Parse for FnTraitKind {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         if input.peek::<tok::CFn>() {
-            Ok(FnKind::Fn(input.parse()?))
+            Ok(FnTraitKind::Fn(input.parse()?))
         } else if input.peek::<tok::CFnMut>() {
-            Ok(FnKind::FnMut(input.parse()?))
+            Ok(FnTraitKind::FnMut(input.parse()?))
         } else if input.peek::<tok::CFnOnce>() {
-            Ok(FnKind::FnOnce(input.parse()?))
+            Ok(FnTraitKind::FnOnce(input.parse()?))
         } else {
             input.error_exhausted()?;
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct Supertraits {
+    pub colon_tok: tok::Colon,
+    pub traits: Punctuated<Supertrait, tok::Plus>,
+}
+
+impl Supertraits {
+    pub fn parse_supertrait_list(
+        input: &mut ParseBuffer<'_>,
+    ) -> CampResult<Punctuated<Supertrait, tok::Plus>> {
+        let mut traits = Punctuated::new();
+
+        loop {
+            traits.push(input.parse()?);
+
+            if input.peek::<tok::Plus>() {
+                traits.push_punct(input.parse()?);
+            } else {
+                break;
+            }
+        }
+
+        Ok(traits)
+    }
+}
+
+impl Parse for Supertraits {
+    type Context = ();
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
+        let colon_tok = input.parse()?;
+        let traits = Supertraits::parse_supertrait_list(input)?;
+
+        Ok(Supertraits { colon_tok, traits })
+    }
+}
+
+impl ShouldParse for Supertraits {
+    fn should_parse(input: &mut ParseBuffer<'_>) -> bool {
+        input.peek::<tok::Colon>()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum Supertrait {
+    Trait(TraitTy),
+    Lifetime(tok::Lifetime),
+}
+
+impl Supertrait {
+    pub fn span(&self) -> Span {
+        match self {
+            Supertrait::Trait(t) => t.span(),
+            Supertrait::Lifetime(t) => t.span,
+        }
+    }
+}
+
+impl Parse for Supertrait {
+    type Context = ();
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
+        Ok(if input.peek::<tok::Lifetime>() {
+            Supertrait::Lifetime(input.parse()?)
+        } else {
+            Supertrait::Trait(input.parse()?)
+        })
     }
 }

@@ -1,0 +1,6 @@
+error: Attribute `hello` not expected here
+  ┌─ $DIR/unexpected_attr.camp:1:1
+  │
+1 │ #[hello = "world"]
+  │ ^^^^^^^^^^^^^^^^^^
+

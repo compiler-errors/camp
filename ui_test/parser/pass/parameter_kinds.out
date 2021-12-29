@@ -1,6 +1,7 @@
 Mod {
     items: [
         Trait {
+            attrs: [],
             viz: Private,
             fn_tok: Trait,
             ident: Ident {
@@ -11,8 +12,9 @@ Mod {
             where_clause: None,
             lcurly_tok: LCurly,
             trait_items: [
-                TraitFn {
+                TraitFunction {
                     signature: Signature {
+                        attrs: [],
                         viz: Private,
                         fn_tok: Fn,
                         ident: Ident {
@@ -35,8 +37,9 @@ Mod {
                     },
                     semi_tok: Semicolon,
                 },
-                TraitFn {
+                TraitFunction {
                     signature: Signature {
+                        attrs: [],
                         viz: Private,
                         fn_tok: Fn,
                         ident: Ident {
@@ -63,8 +66,9 @@ Mod {
                     },
                     semi_tok: Semicolon,
                 },
-                TraitFn {
+                TraitFunction {
                     signature: Signature {
+                        attrs: [],
                         viz: Private,
                         fn_tok: Fn,
                         ident: Ident {
@@ -93,8 +97,9 @@ Mod {
                     },
                     semi_tok: Semicolon,
                 },
-                TraitFn {
+                TraitFunction {
                     signature: Signature {
+                        attrs: [],
                         viz: Private,
                         fn_tok: Fn,
                         ident: Ident {
@@ -119,8 +124,9 @@ Mod {
                     },
                     semi_tok: Semicolon,
                 },
-                TraitFn {
+                TraitFunction {
                     signature: Signature {
+                        attrs: [],
                         viz: Private,
                         fn_tok: Fn,
                         ident: Ident {
@@ -151,8 +157,9 @@ Mod {
                     },
                     semi_tok: Semicolon,
                 },
-                TraitFn {
+                TraitFunction {
                     signature: Signature {
+                        attrs: [],
                         viz: Private,
                         fn_tok: Fn,
                         ident: Ident {
@@ -185,8 +192,9 @@ Mod {
                     },
                     semi_tok: Semicolon,
                 },
-                TraitFn {
+                TraitFunction {
                     signature: Signature {
+                        attrs: [],
                         viz: Private,
                         fn_tok: Fn,
                         ident: Ident {
@@ -232,8 +240,9 @@ Mod {
                     },
                     semi_tok: Semicolon,
                 },
-                TraitFn {
+                TraitFunction {
                     signature: Signature {
+                        attrs: [],
                         viz: Private,
                         fn_tok: Fn,
                         ident: Ident {

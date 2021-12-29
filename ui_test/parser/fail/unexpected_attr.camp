@@ -1,0 +1,2 @@
+#[hello = "world"]
+pub use foo;

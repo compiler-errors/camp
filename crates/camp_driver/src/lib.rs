@@ -5,12 +5,12 @@ use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 pub use camp_files::CampsiteArg;
-use camp_files::{FilesDb, FilesStorage};
+use camp_files::{FilesDb, FilesStorage, CampResult};
 use camp_import_resolve::{ResolveDb, ResolveStorage};
 use camp_lex::lex;
 use camp_parse::{ParseDb, ParseStorage};
 
-pub use crate::result::{DriverError, DriverResult};
+pub use crate::result::{DriverError};
 
 #[salsa::database(ParseStorage, FilesStorage, ResolveStorage)]
 #[derive(Default)]
@@ -20,7 +20,7 @@ pub struct CampDb {
 
 impl salsa::Database for CampDb {}
 
-pub fn lex_stage(db: &mut CampDb, input_file: Utf8PathBuf) -> DriverResult<()> {
+pub fn lex_stage(db: &mut CampDb, input_file: Utf8PathBuf) -> CampResult<()> {
     let id = db.file_id(input_file)?;
     let contents = db.open_file(id)?;
 
@@ -31,7 +31,7 @@ pub fn lex_stage(db: &mut CampDb, input_file: Utf8PathBuf) -> DriverResult<()> {
     Ok(())
 }
 
-pub fn parse_stage(db: &mut CampDb, root: CampsiteArg) -> DriverResult<()> {
+pub fn parse_stage(db: &mut CampDb, root: CampsiteArg) -> CampResult<()> {
     let root_name = root.name.clone();
     db.set_campsites(Arc::new([root]));
 
@@ -49,7 +49,7 @@ pub fn verify_stage(
     db: &mut CampDb,
     root: CampsiteArg,
     mut libs: Vec<CampsiteArg>,
-) -> DriverResult<()> {
+) -> CampResult<()> {
     let root_name = root.name.clone();
     libs.push(root);
     db.set_campsites(libs.into());

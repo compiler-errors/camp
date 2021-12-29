@@ -1,0 +1,90 @@
+Mod {
+    items: [
+        Struct {
+            attrs: [
+                Attribute {
+                    hash_tok: Hash,
+                    lsq_tok: LSq,
+                    inner: NameValue {
+                        ident: Ident {
+                            ident: "hello",
+                        },
+                        eq_tok: Eq,
+                        lit: StringLit {
+                            value: "world",
+                        },
+                    },
+                    rsq_tok: RSq,
+                },
+                Attribute {
+                    hash_tok: Hash,
+                    lsq_tok: LSq,
+                    inner: NameValue {
+                        ident: Ident {
+                            ident: "hello2",
+                        },
+                        eq_tok: Eq,
+                        lit: StringLit {
+                            value: "world2",
+                        },
+                    },
+                    rsq_tok: RSq,
+                },
+            ],
+            viz: Pub(
+                Pub,
+                None,
+            ),
+            struct_tok: Struct,
+            ident: Ident {
+                ident: "Foo",
+            },
+            generics: None,
+            fields: None,
+            where_clause: None,
+            semi_tok: Some(
+                Semicolon,
+            ),
+        },
+        Function {
+            sig: Signature {
+                attrs: [
+                    Attribute {
+                        hash_tok: Hash,
+                        lsq_tok: LSq,
+                        inner: NameValue {
+                            ident: Ident {
+                                ident: "hi",
+                            },
+                            eq_tok: Eq,
+                            lit: StringLit {
+                                value: "bye",
+                            },
+                        },
+                        rsq_tok: RSq,
+                    },
+                ],
+                viz: Private,
+                fn_tok: Fn,
+                ident: Ident {
+                    ident: "foo",
+                },
+                generics: None,
+                where_clause: None,
+                lparen_tok: LParen,
+                parameters: Punctuated {
+                    items: [],
+                    last: None,
+                },
+                rparen_tok: RParen,
+                return_ty: None,
+            },
+            body: ExprBlock {
+                lcurly_tok: LCurly,
+                stmts: [],
+                final_expr: None,
+                rcurly_tok: RCurly,
+            },
+        },
+    ],
+}

@@ -1,0 +1,6 @@
+#[hello = "world"]
+#[hello2 = "world2"]
+pub struct Foo;
+
+#[hi = "bye"]
+fn foo() {}

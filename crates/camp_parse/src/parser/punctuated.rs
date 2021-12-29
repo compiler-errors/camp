@@ -39,7 +39,7 @@ impl<T, S> Punctuated<T, S> {
     }
 
     pub fn unwrap_one(self) -> T {
-        assert_eq!(self.items.len(), 1);
+        assert_eq!(self.len(), 1);
         *self.last.unwrap()
     }
 

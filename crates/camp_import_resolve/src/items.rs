@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use camp_files::Span;
-use camp_parse::ast::{EnumId, FnId, ModId, StructId, TraitId, Visibility as AstVisibility};
-use camp_parse::tok::Ident;
+use camp_parse::{
+    EnumId, FunctionId, Ident, ImplId, ModId, Span, StructId, TraitId, Visibility as AstVisibility,
+};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ItemViz {
@@ -18,8 +18,11 @@ pub enum Item {
     Struct(StructId),
     Enum(EnumId),
     EnumVariant(EnumId, String),
-    Fn(FnId),
+    Function(FunctionId),
     Trait(TraitId),
+    /// These items are not nameable, but this variant exists for use in
+    /// downstream crates
+    Impl(ImplId),
 }
 
 impl Item {
@@ -29,10 +32,30 @@ impl Item {
             Item::Struct(_) => "struct",
             Item::Enum(_) => "enum",
             Item::EnumVariant(_, _) => "enum variant",
-            Item::Fn(_) => "function",
+            Item::Function(_) => "function",
             Item::Trait(_) => "trait",
+            Item::Impl(_) => "impl",
         }
     }
+}
+
+macro_rules! from {
+    ($($ident:ident : $ty:ty),+ $(,)?) => {$(
+        impl From<$ty> for Item {
+            fn from(i: $ty) -> Self {
+                Item::$ident(i)
+            }
+        }
+    )*}
+}
+
+from! {
+    Mod: ModId,
+    Struct: StructId,
+    Enum: EnumId,
+    Function: FunctionId,
+    Trait: TraitId,
+    Impl: ImplId,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -63,7 +86,7 @@ pub enum Visibility {
 
 impl From<&AstVisibility> for Visibility {
     fn from(viz: &AstVisibility) -> Self {
-        use camp_parse::ast::{VisibilityRange, VisibilityRangeKind};
+        use camp_parse::{VisibilityRange, VisibilityRangeKind};
 
         match viz {
             AstVisibility::Private => Visibility::Private,

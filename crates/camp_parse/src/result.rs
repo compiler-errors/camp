@@ -1,9 +1,7 @@
 use camino::Utf8PathBuf;
 use camp_files::{FileError, FileId, Span};
-use camp_lex::LexError;
+use camp_util::IntoCampError;
 use codespan_derive::IntoDiagnostic;
-
-pub type ParseResult<T> = std::result::Result<T, ParseError>;
 
 #[derive(IntoDiagnostic, Debug, PartialEq, Eq, Clone)]
 #[file_id(FileId)]
@@ -14,6 +12,12 @@ pub enum ParseError {
     UnexpectedViz(#[primary] Span),
     #[message = "Mutability token not expected before struct literal"]
     UnexpectedMut(#[primary] Span),
+    #[message = "Attribute `{name}` not expected here"]
+    UnexpectedAttr {
+        name: String,
+        #[primary]
+        span: Span,
+    },
     #[message = "Where clause cannot precede tuple members"]
     ImproperWhere(#[primary] Span),
     #[message = "This type is not a trait, cannot be implemented"]
@@ -46,19 +50,11 @@ pub enum ParseError {
         file1: Utf8PathBuf,
         file2: Utf8PathBuf,
     },
-
-    #[render(LexError::into_diagnostic)]
-    LexError(LexError),
+    #[message = "Standard library `std` not included"]
+    #[note = "Provide `--lib std=/path/to/std/lib.camp`"]
+    NoStd,
 }
 
-impl From<FileError> for ParseError {
-    fn from(e: FileError) -> Self {
-        ParseError::FileError(e)
-    }
-}
-
-impl From<LexError> for ParseError {
-    fn from(e: LexError) -> Self {
-        ParseError::LexError(e)
-    }
+impl IntoCampError for ParseError {
+    type Id = FileId;
 }

@@ -5,7 +5,7 @@ edition = "2018"
 
 [dependencies]
 camp_parse = { path = "../camp_parse" }
-camp_files = { path = "../camp_files" }
+camp_util = { path = "../camp_util" }
 codespan-derive = "0.1.1"
 maplit = "1.0.2"
 salsa = "0.16.1"

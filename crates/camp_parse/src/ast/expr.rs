@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
-use camp_files::Span;
+use camp_util::bail;
 use derivative::Derivative;
 
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, Generics, ParseError, ParseResult, Pat, PathSegment, ReturnTy, Ty, TyElaborated};
+use crate::{
+    tok, CampResult, Generics, ParseError, Pat, PathSegment, ReturnTy, Span, Ty, TyElaborated,
+};
 
 #[derive(Copy, Clone)]
 pub struct ExprContext {
@@ -129,7 +131,7 @@ pub enum Expr {
 impl Parse for Expr {
     type Context = ExprContext;
 
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> CampResult<Self> {
         let mut expr = Expr::initial(input, ctx)?;
 
         // the "block" expressions don't take trailing expressions
@@ -169,7 +171,7 @@ impl Parse for Expr {
 }
 
 impl Expr {
-    fn initial(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
+    fn initial(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> CampResult<Expr> {
         Ok(if input.peek::<tok::Let>() {
             Expr::expr_let(input, ctx)?
         } else if UnaryOperator::should_parse(input) {
@@ -215,7 +217,7 @@ impl Expr {
         })
     }
 
-    fn expr_path(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
+    fn expr_path(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> CampResult<Expr> {
         let mut path = Punctuated::new();
         loop {
             path.push(input.parse()?);
@@ -240,7 +242,7 @@ impl Expr {
         }
     }
 
-    fn expr_elaborated(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
+    fn expr_elaborated(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> CampResult<Expr> {
         let ty = input.parse()?;
         let colon_colon_tok = input.parse()?;
         let mut path = Punctuated::new();
@@ -262,15 +264,11 @@ impl Expr {
         }))
     }
 
-    fn expr_lit(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
-        Ok(if input.peek::<tok::Number>() {
-            Expr::Literal(ExprLiteral::Number(input.parse()?))
-        } else {
-            input.error_exhausted()?;
-        })
+    fn expr_lit(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> CampResult<Expr> {
+        Ok(Expr::Literal(input.parse()?))
     }
 
-    fn expr_group(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
+    fn expr_group(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> CampResult<Expr> {
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
         Ok(Expr::Group(ExprGroup {
@@ -280,17 +278,17 @@ impl Expr {
         }))
     }
 
-    fn expr_array(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
-        let (lcurly_tok, contents, rcurly_tok) = input.parse_between_curlys()?;
+    fn expr_array(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> CampResult<Expr> {
+        let (lsq_tok, contents, rsq_tok) = input.parse_between_sqs()?;
 
         Ok(Expr::Array(ExprArray {
-            lcurly_tok,
-            exprs: contents.parse_punctuated_with(ExprContext::any_expr(), rcurly_tok)?,
-            rcurly_tok,
+            lsq_tok,
+            exprs: contents.parse_punctuated_with(ExprContext::any_expr(), rsq_tok)?,
+            rsq_tok,
         }))
     }
 
-    fn expr_break(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
+    fn expr_break(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> CampResult<Expr> {
         let break_tok = input.parse()?;
         let label = input.parse()?;
         let expr = if input.is_empty()
@@ -309,7 +307,7 @@ impl Expr {
         }))
     }
 
-    pub fn expr_block(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
+    pub fn expr_block(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> CampResult<Expr> {
         let (lcurly_tok, mut contents, rcurly_tok) = input.parse_between_curlys()?;
         let mut stmts = vec![];
         let final_expr;
@@ -347,7 +345,7 @@ impl Expr {
         }))
     }
 
-    fn expr_return(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
+    fn expr_return(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> CampResult<Expr> {
         let return_tok = input.parse()?;
         let expr = if input.is_empty()
             || input.peek::<tok::Semicolon>()
@@ -361,14 +359,14 @@ impl Expr {
         Ok(Expr::Return(ExprReturn { return_tok, expr }))
     }
 
-    fn expr_continue(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
+    fn expr_continue(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> CampResult<Expr> {
         Ok(Expr::Continue(ExprContinue {
             continue_tok: input.parse()?,
             label: input.parse()?,
         }))
     }
 
-    fn expr_let(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
+    fn expr_let(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> CampResult<Expr> {
         let expr = Expr::Let(ExprLet {
             let_tok: input.parse()?,
             pat: input.parse()?,
@@ -380,11 +378,11 @@ impl Expr {
         if ctx.allow_let {
             Ok(expr)
         } else {
-            Err(ParseError::DisallowLet(expr.span()))
+            bail!(ParseError::DisallowLet(expr.span()));
         }
     }
 
-    fn expr_control_flow(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
+    fn expr_control_flow(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> CampResult<Expr> {
         let label = input.parse()?;
 
         if input.peek::<tok::Loop>() {
@@ -402,7 +400,7 @@ impl Expr {
         input: &mut ParseBuffer<'_>,
         ctx: ExprContext,
         label: Option<LoopLabel>,
-    ) -> ParseResult<Expr> {
+    ) -> CampResult<Expr> {
         Ok(Expr::Loop(ExprLoop {
             label,
             loop_tok: input.parse()?,
@@ -414,7 +412,7 @@ impl Expr {
         input: &mut ParseBuffer<'_>,
         ctx: ExprContext,
         label: Option<LoopLabel>,
-    ) -> ParseResult<Expr> {
+    ) -> CampResult<Expr> {
         Ok(Expr::While(ExprWhile {
             label,
             while_tok: input.parse()?,
@@ -427,7 +425,7 @@ impl Expr {
         input: &mut ParseBuffer<'_>,
         ctx: ExprContext,
         label: Option<LoopLabel>,
-    ) -> ParseResult<Expr> {
+    ) -> CampResult<Expr> {
         Ok(Expr::For(ExprFor {
             label,
             for_tok: input.parse()?,
@@ -438,7 +436,7 @@ impl Expr {
         }))
     }
 
-    fn expr_match(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> ParseResult<Expr> {
+    fn expr_match(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> CampResult<Expr> {
         let match_tok = input.parse()?;
         let expr = input.parse_with(ExprContext::any_expr_before_braces())?;
 
@@ -468,7 +466,7 @@ impl Expr {
         }))
     }
 
-    fn expr_if(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
+    fn expr_if(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> CampResult<Expr> {
         Ok(Expr::If(ExprIf {
             if_tok: input.parse()?,
             condition: input.parse_with(ExprContext::any_expr())?,
@@ -477,7 +475,7 @@ impl Expr {
         }))
     }
 
-    fn expr_unary(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
+    fn expr_unary(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> CampResult<Expr> {
         let op = input.parse()?;
 
         Ok(Expr::Unary(ExprUnary {
@@ -486,7 +484,7 @@ impl Expr {
         }))
     }
 
-    fn expr_closure(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> ParseResult<Expr> {
+    fn expr_closure(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> CampResult<Expr> {
         let lpipe_tok = input.parse()?;
         let mut parameters = Punctuated::new();
         let rpipe_tok;
@@ -526,7 +524,7 @@ impl Expr {
         }))
     }
 
-    fn expr_range_trailing(input: &mut ParseBuffer<'_>, expr: Option<Expr>) -> ParseResult<Expr> {
+    fn expr_range_trailing(input: &mut ParseBuffer<'_>, expr: Option<Expr>) -> CampResult<Expr> {
         Ok(Expr::RangeTrailing(ExprRangeTrailing {
             expr: expr.map(Arc::new),
             dot_dot_dot_tok: input.parse()?,
@@ -537,7 +535,7 @@ impl Expr {
         input: &mut ParseBuffer<'_>,
         ctx: ExprContext,
         expr: Option<Expr>,
-    ) -> ParseResult<Expr> {
+    ) -> CampResult<Expr> {
         Ok(Expr::RangeInclusive(ExprRangeInclusive {
             left: expr.map(Arc::new),
             dot_dot_eq_tok: input.parse()?,
@@ -549,7 +547,7 @@ impl Expr {
         input: &mut ParseBuffer<'_>,
         ctx: ExprContext,
         expr: Option<Expr>,
-    ) -> ParseResult<Expr> {
+    ) -> CampResult<Expr> {
         Ok(Expr::Range(ExprRange {
             left: expr.map(Arc::new),
             dot_dot_tok: input.parse()?,
@@ -557,7 +555,7 @@ impl Expr {
         }))
     }
 
-    fn expr_access(input: &mut ParseBuffer<'_>, expr: Expr) -> ParseResult<Expr> {
+    fn expr_access(input: &mut ParseBuffer<'_>, expr: Expr) -> CampResult<Expr> {
         Ok(Expr::Access(ExprAccess {
             expr: Arc::new(expr),
             dot_tok: input.parse()?,
@@ -565,9 +563,9 @@ impl Expr {
         }))
     }
 
-    fn expr_call(input: &mut ParseBuffer<'_>, expr: Expr) -> ParseResult<Expr> {
+    fn expr_call(input: &mut ParseBuffer<'_>, expr: Expr) -> CampResult<Expr> {
         if !expr.is_callable() {
-            return Err(ParseError::NotCallable(expr.span()));
+            bail!(ParseError::NotCallable(expr.span()));
         }
 
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
@@ -580,7 +578,7 @@ impl Expr {
         }))
     }
 
-    fn expr_index(input: &mut ParseBuffer<'_>, expr: Expr) -> ParseResult<Expr> {
+    fn expr_index(input: &mut ParseBuffer<'_>, expr: Expr) -> CampResult<Expr> {
         let (lsq_tok, mut contents, rsq_tok) = input.parse_between_sqs()?;
         let right = contents.parse_with(ExprContext::any_expr())?;
 
@@ -594,7 +592,7 @@ impl Expr {
         }))
     }
 
-    fn expr_cast(input: &mut ParseBuffer<'_>, expr: Expr) -> ParseResult<Expr> {
+    fn expr_cast(input: &mut ParseBuffer<'_>, expr: Expr) -> CampResult<Expr> {
         Ok(Expr::Cast(ExprCast {
             expr: Arc::new(expr),
             as_tok: input.parse()?,
@@ -674,17 +672,37 @@ impl Expr {
     fn span(&self) -> Span {
         match self {
             Expr::Block(e) => e.lcurly_tok.span.until(e.rcurly_tok.span),
-            Expr::Path(e) => todo!(),
-            Expr::Elaborated(e) => todo!(),
+            Expr::Path(e) => e
+                .path
+                .first()
+                .expect("expected path to have segments")
+                .span()
+                .until(
+                    e.path
+                        .last()
+                        .expect("expected path to have segments")
+                        .span(),
+                ),
+            Expr::Elaborated(e) => e.ty.lt_tok.span.until(
+                e.path
+                    .last()
+                    .expect("expected path to have segments")
+                    .span(),
+            ),
             Expr::Literal(ExprLiteral::Number(n)) => n.span,
-            Expr::Group(e) => todo!(),
-            Expr::Array(e) => todo!(),
+            Expr::Literal(ExprLiteral::String(s)) => s.span,
+            Expr::Group(e) => e.lparen_tok.span.until(e.rparen_tok.span),
+            Expr::Array(e) => e.lsq_tok.span.until(e.rsq_tok.span),
             Expr::Let(e) => e.let_tok.span.until(e.expr.span()),
-            Expr::Match(e) => todo!(),
-            Expr::If(e) => todo!(),
-            Expr::Loop(e) => todo!(),
-            Expr::While(e) => todo!(),
-            Expr::For(e) => todo!(),
+            Expr::Match(e) => e.match_tok.span.until(e.rcurly_tok.span),
+            Expr::If(e) => e
+                .if_tok
+                .span
+                .until(e.branch.span())
+                .until_maybe(e.else_branch.as_ref().map(|e| e.branch.span())),
+            Expr::Loop(e) => e.loop_tok.span.until(e.branch.span()),
+            Expr::While(e) => e.while_tok.span.until(e.branch.span()),
+            Expr::For(e) => e.for_tok.span.until(e.branch.span()),
             Expr::Unary(e) => todo!(),
             Expr::Binary(e) => todo!(),
             Expr::RangeTrailing(e) => todo!(),
@@ -728,6 +746,22 @@ pub struct ExprElaborated {
 pub enum ExprLiteral {
     #[derivative(Debug = "transparent")]
     Number(tok::Number),
+    #[derivative(Debug = "transparent")]
+    String(tok::StringLit),
+}
+
+impl Parse for ExprLiteral {
+    type Context = ();
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
+        Ok(if input.peek::<tok::Number>() {
+            ExprLiteral::Number(input.parse()?)
+        } else if input.peek::<tok::StringLit>() {
+            ExprLiteral::String(input.parse()?)
+        } else {
+            input.error_exhausted()?;
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -739,9 +773,9 @@ pub struct ExprGroup {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprArray {
-    pub lcurly_tok: tok::LCurly,
+    pub lsq_tok: tok::LSq,
     pub exprs: Punctuated<Expr, tok::Comma>,
-    pub rcurly_tok: tok::RCurly,
+    pub rsq_tok: tok::RSq,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -762,7 +796,7 @@ pub struct TypeAnnotation {
 impl Parse for TypeAnnotation {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(TypeAnnotation {
             colon_tok: input.parse()?,
             ty: input.parse()?,
@@ -796,7 +830,7 @@ pub struct MatchArm {
 impl Parse for MatchArm {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(MatchArm {
             pat: input.parse()?,
             maybe_ty: input.parse()?,
@@ -829,7 +863,7 @@ pub struct Else {
 impl Parse for Else {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let else_tok = input.parse()?;
 
         let branch = Arc::new(if input.peek::<tok::If>() {
@@ -865,7 +899,7 @@ pub struct LoopLabel {
 impl Parse for LoopLabel {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(LoopLabel {
             lifetime: input.parse()?,
             colon_tok: input.parse()?,
@@ -912,7 +946,7 @@ pub enum AccessKind {
 impl Parse for AccessKind {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(if input.peek::<tok::Ident>() {
             AccessKind::Ident(input.parse()?, input.parse()?)
         } else if input.peek::<tok::Number>() {
@@ -932,7 +966,7 @@ pub struct AccessGenerics {
 impl Parse for AccessGenerics {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(AccessGenerics {
             colon_colon_tok: input.parse()?,
             generics: input.parse()?,
@@ -984,7 +1018,7 @@ impl UnaryOperator {
 impl Parse for UnaryOperator {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         match UnaryOperator::peek(input) {
             // If we have `&mut`, peek consume two tokens
             Some(u @ UnaryOperator::RefMut) => {
@@ -1124,7 +1158,7 @@ impl BinaryOperator {
 impl Parse for BinaryOperator {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         if let Some(op) = BinaryOperator::peek(input) {
             for _ in 0..op.num_tokens() {
                 input.bump_tok().expect("Expect token");
@@ -1215,7 +1249,7 @@ pub struct ConstructorArg {
 impl Parse for ConstructorArg {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(ConstructorArg {
             ident: input.parse()?,
             expr: input.parse()?,
@@ -1232,7 +1266,7 @@ pub struct MemberExpr {
 impl Parse for MemberExpr {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(MemberExpr {
             colon_tok: input.parse()?,
             expr: input.parse_with(ExprContext::any_expr())?,
@@ -1264,7 +1298,7 @@ pub struct ClosureParameter {
 impl Parse for ClosureParameter {
     type Context = ();
 
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> ParseResult<Self> {
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(ClosureParameter {
             pat: input.parse()?,
             ty: input.parse()?,

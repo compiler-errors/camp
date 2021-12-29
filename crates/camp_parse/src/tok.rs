@@ -1,8 +1,7 @@
-use camp_files::Span;
 use camp_lex::tok as lex;
 
 use crate::parser::{Parse, ParseBuffer, Peek};
-use crate::ParseResult;
+use crate::{CampResult, Span};
 
 crate::declare_identifiers! {
     "pub" => Pub,
@@ -69,6 +68,7 @@ crate::declare_symbols! {
     "-" => Minus,
     "/" => Slash,
     "%" => Percent,
+    "#" => Hash,
 }
 
 crate::delimiter_toks!(Paren, LParen, "(", RParen, ")");
@@ -77,6 +77,24 @@ crate::delimiter_toks!(Sq, LSq, "[", RSq, "]");
 
 crate::literal_tok!(Number, "number");
 crate::literal_tok!(Lifetime, "lifetime");
+crate::literal_tok!(StringLit, "string");
+
+impl Number {
+    pub fn expect_usize(&self) -> CampResult<usize> {
+        todo!()
+    }
+}
+
+impl StringLit {
+    pub fn remove_quotes(&self) -> &str {
+        self.value
+            .strip_prefix('"')
+            .unwrap()
+            .strip_suffix('"')
+            .unwrap()
+    }
+}
+
 /// Implementation for the declarative macros above
 
 mod util {
@@ -86,7 +104,7 @@ mod util {
         matches!(input.peek_tok(), Some(lex::Token::Ident(lex::TokenIdent { span: _, ident })) if !is_keyword(&ident))
     }
 
-    pub fn parse_ident(input: &mut ParseBuffer<'_>) -> ParseResult<Ident> {
+    pub fn parse_ident(input: &mut ParseBuffer<'_>) -> CampResult<Ident> {
         if input.peek::<Ident>() {
             match input.bump_tok() {
                 Some(lex::Token::Ident(lex::TokenIdent { span, ident })) => Ok(Ident {
@@ -104,7 +122,7 @@ mod util {
         matches!(input.peek_tok(), Some(lex::Token::Ident(lex::TokenIdent { span: _, ident })) if ident == keyword)
     }
 
-    pub fn parse_keyword<T: From<Span> + Peek>(input: &mut ParseBuffer<'_>) -> ParseResult<T> {
+    pub fn parse_keyword<T: From<Span> + Peek>(input: &mut ParseBuffer<'_>) -> CampResult<T> {
         if input.peek::<T>() {
             match input.bump_tok() {
                 Some(lex::Token::Ident(lex::TokenIdent { span, ident: _ })) => Ok(T::from(*span)),
@@ -137,7 +155,7 @@ mod util {
     pub fn parse_symbol<T: From<Span> + Peek>(
         input: &mut ParseBuffer<'_>,
         symbols: &'static str,
-    ) -> ParseResult<T> {
+    ) -> CampResult<T> {
         if input.peek::<T>() {
             let mut symbol_span = input.next_span();
 

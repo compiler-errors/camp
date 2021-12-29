@@ -7,6 +7,7 @@ edition = "2021"
 camino = "1.0.5"
 camp_parse = { path = "../camp_parse" }
 camp_files = { path = "../camp_files" }
+camp_util = { path = "../camp_util" }
 codespan-derive = "0.1.1"
 codespan-reporting = "0.11.1"
 salsa = "0.16.1"

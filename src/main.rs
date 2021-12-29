@@ -75,7 +75,7 @@ fn main() {
         Mode::Lex { file } => lex_stage(&mut db, file),
         Mode::Parse { campsite_file } => parse_stage(&mut db, campsite_file),
         Mode::Verify { site, libs } => verify_stage(&mut db, site, libs),
-        mode => Err(DriverError::UnsupportedMode(mode.name())),
+        mode => Err(DriverError::UnsupportedMode(mode.name()).into()),
     };
 
     if let Err(err) = output {

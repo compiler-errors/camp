@@ -2,8 +2,9 @@ Mod {
     items: [
         Mod {
             items: [
-                Fun {
+                Function {
                     sig: Signature {
+                        attrs: [],
                         viz: Private,
                         fn_tok: Fn,
                         ident: Ident {

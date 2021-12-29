@@ -7,13 +7,16 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
-use camp_util::id_type;
+use camp_util::{bail, id_type, BoxedError};
 use codespan_derive::IntoLabel;
 use maplit::btreemap;
 
-pub use crate::result::{FileError, FileResult};
+pub use crate::result::FileError;
 
 id_type!(pub FileId);
+
+pub type CampResult<T> = std::result::Result<T, CampError>;
+pub type CampError = BoxedError<FileId>;
 
 #[salsa::query_group(FilesStorage)]
 pub trait FilesDb {
@@ -23,9 +26,9 @@ pub trait FilesDb {
     #[salsa::interned]
     fn campsite_decl(&self, decl: Arc<CampsiteDecl>) -> CampsiteId;
 
-    fn campsites_by_name(&self) -> FileResult<Arc<BTreeMap<String, CampsiteId>>>;
+    fn campsites_by_name(&self) -> CampResult<Arc<BTreeMap<String, CampsiteId>>>;
 
-    fn campsite_by_name(&self, name: String) -> FileResult<Option<CampsiteId>>;
+    fn campsite_by_name(&self, name: String) -> CampResult<Option<CampsiteId>>;
 
     fn campsite_name(&self, campsite: CampsiteId) -> String;
 
@@ -33,25 +36,25 @@ pub trait FilesDb {
 
     fn campsite_root_file(&self, id: CampsiteId) -> Utf8PathBuf;
 
-    fn file_id(&self, path: Utf8PathBuf) -> FileResult<FileId>;
+    fn file_id(&self, path: Utf8PathBuf) -> CampResult<FileId>;
 
     fn lookup_file_id(&self, id: FileId) -> Utf8PathBuf;
 
     #[salsa::interned]
     fn file_id_for_canonical_path(&self, path: Utf8PathBuf) -> FileId;
 
-    fn open_file(&self, path: FileId) -> FileResult<Arc<str>>;
+    fn open_file(&self, path: FileId) -> CampResult<Arc<str>>;
 
     // Used by codespan
 
     #[salsa::invoke(codespan::line_starts)]
-    fn line_starts(&self, id: FileId) -> FileResult<Arc<[usize]>>;
+    fn line_starts(&self, id: FileId) -> CampResult<Arc<[usize]>>;
 
     #[salsa::invoke(codespan::line_start)]
-    fn line_start(&self, id: FileId, idx: usize) -> FileResult<usize>;
+    fn line_start(&self, id: FileId, idx: usize) -> CampResult<usize>;
 }
 
-fn campsites_by_name(db: &dyn FilesDb) -> FileResult<Arc<BTreeMap<String, CampsiteId>>> {
+fn campsites_by_name(db: &dyn FilesDb) -> CampResult<Arc<BTreeMap<String, CampsiteId>>> {
     let mut mapping = btreemap![];
 
     for arg in db.campsites().iter() {
@@ -60,7 +63,7 @@ fn campsites_by_name(db: &dyn FilesDb) -> FileResult<Arc<BTreeMap<String, Campsi
         if mapping.contains_key(&arg.name) {
             let existing_id = db.lookup_campsite_decl(mapping[&arg.name]).file_id;
             if existing_id != file_id {
-                return Err(FileError::DuplicateCampsite {
+                bail!(FileError::DuplicateCampsite {
                     name: arg.name.clone(),
                     path1: arg.path.clone(),
                     path2: db.lookup_file_id(existing_id),
@@ -80,7 +83,7 @@ fn campsites_by_name(db: &dyn FilesDb) -> FileResult<Arc<BTreeMap<String, Campsi
     Ok(Arc::new(mapping))
 }
 
-fn campsite_by_name(db: &dyn FilesDb, name: String) -> FileResult<Option<CampsiteId>> {
+fn campsite_by_name(db: &dyn FilesDb, name: String) -> CampResult<Option<CampsiteId>> {
     let campsites = db.campsites_by_name()?;
 
     // NOTE: We don't map this to a result yet because we don't have a span to
@@ -100,7 +103,7 @@ fn campsite_root_file_id(db: &dyn FilesDb, id: CampsiteId) -> FileId {
     db.lookup_campsite_decl(id).file_id
 }
 
-fn file_id(db: &dyn FilesDb, path: Utf8PathBuf) -> FileResult<FileId> {
+fn file_id(db: &dyn FilesDb, path: Utf8PathBuf) -> CampResult<FileId> {
     let canonical_path: Utf8PathBuf = path
         .canonicalize()
         .map_err(FileError::from)?
@@ -108,11 +111,11 @@ fn file_id(db: &dyn FilesDb, path: Utf8PathBuf) -> FileResult<FileId> {
         .map_err(|e| FileError::NotUtf8(e))?;
 
     if !path.is_file() {
-        return Err(FileError::NotFile(path));
+        bail!(FileError::NotFile(path));
     }
 
     if path.extension() != Some("camp") {
-        return Err(FileError::NotCampFile(path));
+        bail!(FileError::NotCampFile(path));
     }
 
     Ok(db.file_id_for_canonical_path(canonical_path))
@@ -122,7 +125,7 @@ fn lookup_file_id(db: &dyn FilesDb, id: FileId) -> Utf8PathBuf {
     db.lookup_file_id_for_canonical_path(id)
 }
 
-fn open_file(db: &dyn FilesDb, id: FileId) -> FileResult<Arc<str>> {
+fn open_file(db: &dyn FilesDb, id: FileId) -> CampResult<Arc<str>> {
     let path: Utf8PathBuf = db.lookup_file_id(id);
 
     Ok(std::fs::read_to_string(&path)
@@ -137,6 +140,22 @@ impl Span {
     pub fn until(self, other: Span) -> Span {
         assert_eq!(self.0, other.0, "Can only unify spans of the same file!");
         Span(self.0, self.1.min(other.1), self.2.max(other.2))
+    }
+
+    pub fn until_maybe(self, other: Option<Span>) -> Span {
+        if let Some(other) = other {
+            self.until(other)
+        } else {
+            self
+        }
+    }
+
+    pub fn shrink_to_lo(self) -> Span {
+        Span(self.0, self.1, self.1)
+    }
+
+    pub fn shrink_to_hi(self) -> Span {
+        Span(self.0, self.2, self.2)
     }
 }
 

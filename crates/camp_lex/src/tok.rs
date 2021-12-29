@@ -76,5 +76,5 @@ pub enum TokenLiteralKind {
     Number(String),
     Char(char),
     Lifetime(String),
-    String(String),
+    StringLit(String),
 }

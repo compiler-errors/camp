@@ -1,23 +1,14 @@
 use camp_files::{FileId, Span};
+use camp_util::IntoCampError;
 use codespan_derive::IntoDiagnostic;
 
 use crate::tok::TokenDelim;
 
-pub type LexResult<T> = std::result::Result<T, LexError>;
+pub type CampResult<T> = std::result::Result<T, LexError>;
 
 #[derive(IntoDiagnostic, Debug, PartialEq, Eq, Clone)]
 #[file_id(FileId)]
 pub enum LexError {
-    #[message = "Reached end of the file while parsing block comment"]
-    EofInComment(#[primary] Span),
-    #[message = "Reached end of the file while parsing character literal"]
-    EofInChar(#[primary] Span),
-    #[message = "Reached end of the file while parsing character escape"]
-    EofInEscape(#[primary] Span),
-    #[message = "Reached end of the file while parsing string literal"]
-    EofInString(#[primary] Span),
-    #[message = "Reached end of the line while parsing string literal"]
-    EolInString(#[primary] Span),
     #[message = "Unexpected {1}"]
     UnexpectedDelimiter(#[primary] Span, TokenDelim),
     #[message = "Unmatched {1}"]
@@ -41,4 +32,19 @@ pub enum LexError {
     UnexpectedEscape(#[primary] Span, char),
     #[message = "Unrecognized symbol `{1}`"]
     UnrecognizedCharacter(#[primary] Span, char),
+
+    #[message = "Reached end of the file while parsing block comment"]
+    EofInComment(#[primary] Span),
+    #[message = "Reached end of the file while parsing character literal"]
+    EofInChar(#[primary] Span),
+    #[message = "Reached end of the file while parsing character escape"]
+    EofInEscape(#[primary] Span),
+    #[message = "Reached end of the file while parsing string literal"]
+    EofInString(#[primary] Span),
+    #[message = "Reached end of the line while parsing string literal"]
+    EolInString(#[primary] Span),
+}
+
+impl IntoCampError for LexError {
+    type Id = FileId;
 }

@@ -12,15 +12,16 @@ fn ui_tests() -> framework::Result<()> {
         if !parse_file(&test, true)? {
             failing.push(test.path);
         }
+        framework::flush()?;
     }
 
     for test in fail_tests {
         if !parse_file(&test, false)? {
             failing.push(test.path);
         }
+        framework::flush()?;
     }
 
-    framework::flush()?;
     framework::report_failing_tests(failing)
 }
 
