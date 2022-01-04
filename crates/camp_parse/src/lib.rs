@@ -1,9 +1,15 @@
 #![feature(never_type)]
 
-mod ast;
+mod attr;
+mod expr;
+mod function;
+mod item;
 mod parser;
+mod pat;
+mod path;
 mod result;
 mod tok;
+mod ty;
 
 #[cfg(test)]
 mod ui_test;
@@ -11,13 +17,22 @@ mod ui_test;
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
-pub use camp_files::{CampError, CampResult, CampsiteId, FileId, Span};
+use camp_ast::{
+    CampResult, CampsiteId, Enum, EnumId, FileId, Function, FunctionId, Impl, ImplId, ImplItemDecl,
+    ImplItemId, ItemDecl, ItemId, Mod, ModDecl, ModId, ModuleItem, Struct, StructId, Trait,
+    TraitId, TraitItemDecl, TraitItemId,
+};
 use camp_util::bail;
-use log::debug;
-pub use tok::{Ident, Lifetime, Star, StringLit};
 
-pub use crate::ast::*;
+pub use crate::attr::*;
+pub use crate::expr::*;
+pub use crate::function::*;
+pub use crate::item::*;
+use crate::parser::{Parse, ParseBuffer, Peek, ShouldParse};
+pub use crate::pat::*;
+pub use crate::path::*;
 use crate::result::ParseError;
+pub use crate::ty::*;
 
 #[salsa::query_group(ParseStorage)]
 pub trait ParseDb: camp_files::FilesDb {
@@ -61,7 +76,6 @@ pub trait ParseDb: camp_files::FilesDb {
 
     // ----- Internal plumbing ----- //
 
-    #[salsa::invoke(Mod::mod_ast_from_file)]
     fn mod_ast_from_file(&self, id: ModId) -> CampResult<Arc<Mod>>;
 
     #[salsa::interned]
@@ -134,8 +148,6 @@ fn submod_directory(db: &dyn ParseDb, id: ModId) -> CampResult<Utf8PathBuf> {
         ModDecl::CampsiteRoot(id) => {
             let path = db.campsite_root_file(id);
             let directory = path.parent().expect("Canonical files must have a parent").to_owned();
-
-            debug!("submod directory for {:?} is {}", id, directory);
 
             if directory.is_dir() {
                 Ok(directory)

@@ -6,8 +6,8 @@ mod result;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
+use camp_ast::{CampResult, CampsiteId, EnumId, FunctionId, ImplId, ModId, StructId, TraitId};
 use camp_import_resolve::Item;
-use camp_parse::{CampResult, CampsiteId, EnumId, FunctionId, ImplId, ModId, StructId, TraitId};
 use camp_util::id_type;
 use lang_item::LangItem;
 

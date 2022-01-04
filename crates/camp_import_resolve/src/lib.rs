@@ -4,7 +4,7 @@ mod result;
 
 use std::sync::Arc;
 
-use camp_parse::{CampResult, CampsiteId, EnumId, ModId, ParseDb, Use as AstUse};
+use camp_ast::{CampResult, CampsiteId, EnumId, ModId, Use as AstUse};
 
 use crate::items::{CampsiteItems, Items, UnresolvedUse};
 pub use crate::items::{Item, ItemViz, Visibility};
@@ -12,7 +12,7 @@ pub use crate::resolve::lower_first_path_segment;
 pub use crate::result::{UnspannedResolveError, UnspannedResolveResult};
 
 #[salsa::query_group(ResolveStorage)]
-pub trait ResolveDb: ParseDb {
+pub trait ResolveDb: camp_parse::ParseDb {
     // ------------------ "Public" API for lowering paths ------------------ //
 
     // TODO: Should probably factor this into a call that just takes String when

@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use camp_parse::{
-    CampResult, EnumId, FunctionId, Ident, ImplId, ModId, Span, StructId, TraitId,
+use camp_ast::{
+    tok::Ident, CampResult, EnumId, FunctionId, ModId, Span, StructId, TraitId,
     Visibility as AstVisibility,
 };
 use camp_util::bail;
@@ -92,7 +92,7 @@ pub enum Visibility {
 
 impl From<&AstVisibility> for Visibility {
     fn from(viz: &AstVisibility) -> Self {
-        use camp_parse::{VisibilityRange, VisibilityRangeKind};
+        use camp_ast::{VisibilityRange, VisibilityRangeKind};
 
         match viz {
             AstVisibility::Private => Visibility::Private,

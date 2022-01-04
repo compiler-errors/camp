@@ -8,5 +8,6 @@ camp_parse = { path = "../camp_parse" }
 camp_util = { path = "../camp_util" }
 codespan-derive = "0.1.1"
 maplit = "1.0.2"
+camp_ast = { path = "../camp_ast" }
 salsa = "0.16.1"
 codespan-reporting = "0.11.1"

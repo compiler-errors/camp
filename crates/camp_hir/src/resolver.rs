@@ -2,10 +2,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::iter::Peekable;
 use std::sync::Arc;
 
-use ast::CampResult;
+use camp_ast::Span;
+use camp_ast::{self as ast, CampResult};
 use camp_import_resolve::Item;
-use camp_parse as ast;
-use camp_parse::Span;
 use camp_util::bail;
 
 use crate::hir::*;
@@ -32,11 +31,11 @@ pub trait ResolveContext {
 
     fn self_ty_kind(&self) -> CampResult<TyKind>;
 
-     fn fresh_infer_lifetime(&self, span: Span) -> CampResult<Lifetime>;
+    fn fresh_infer_lifetime(&self, span: Span) -> CampResult<Lifetime>;
 
-     fn resolve_lifetime(&self, l: &ast::Lifetime) -> CampResult<Lifetime>;
+    fn resolve_lifetime(&self, l: &ast::Lifetime) -> CampResult<Lifetime>;
 
-     fn fresh_infer_ty(&self, span: Span) -> CampResult<Arc<Ty>>;
+    fn fresh_infer_ty(&self, span: Span) -> CampResult<Arc<Ty>>;
 }
 
 impl<T: ResolveContext> Resolver<T> {

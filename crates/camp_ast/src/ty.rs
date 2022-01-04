@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use derivative::Derivative;
 
-use crate::{tok, CampResult, Mutability, Path, ReturnTy, Span, punctuated::Punctuated};
+use crate::{punctuated::Punctuated, tok, Mutability, Path, ReturnTy, Span};
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]
@@ -60,7 +60,7 @@ impl Ty {
         }
     }
 
-    fn is_associable(&self) -> bool {
+    pub fn is_associable(&self) -> bool {
         match self {
             Ty::Elaborated(_) | Ty::Assoc(_) | Ty::Path(_) | Ty::SelfTy(_) => true,
             Ty::Group(_)

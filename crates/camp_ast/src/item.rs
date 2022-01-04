@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 pub use camp_lex::tok::Token as RawToken;
-use camp_util::{bail, id_type, wrapper_id_type};
+use camp_util::{id_type, wrapper_id_type};
 use derivative::Derivative;
 
 use crate::{
-    tok, CampResult, CampsiteId, Expr, ExprLiteral, Function, ParseAttrs, Path, Signature, Span,
-    Supertraits, TraitTy, Ty, Visibility, punctuated::Punctuated,
+    punctuated::Punctuated, tok, CampsiteId, Expr, ExprLiteral, Function, Path, Signature, Span,
+    Supertraits, TraitTy, Ty, Visibility,
 };
 
 id_type!(pub ModId);
@@ -288,8 +288,8 @@ id_type!(pub TraitItemId);
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct TraitItemDecl {
-    trait_id: TraitId,
-    idx: usize,
+    pub trait_id: TraitId,
+    pub idx: usize,
 }
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
@@ -344,16 +344,16 @@ pub struct Impl {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ImplTrait {
-    trait_ty: TraitTy,
-    for_tok: tok::For,
+    pub trait_ty: TraitTy,
+    pub for_tok: tok::For,
 }
 
 id_type!(pub ImplItemId);
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct ImplItemDecl {
-    impl_id: ImplId,
-    idx: usize,
+    pub impl_id: ImplId,
+    pub idx: usize,
 }
 
 #[derive(Derivative, PartialEq, Eq, Hash)]

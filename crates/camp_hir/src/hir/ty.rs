@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use camp_parse::{self as ast, CampResult};
+use camp_ast::{self as ast, CampResult};
 use camp_util::{bail, id_type, IteratorExt};
 
 use crate::lang_item::LangItem;

@@ -1,6 +1,6 @@
 use camp_files::Span;
 
-use crate::{tok, CampResult, Generics, punctuated::Punctuated};
+use crate::{punctuated::Punctuated, tok, Generics};
 
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub struct Path {

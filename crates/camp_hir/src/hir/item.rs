@@ -1,14 +1,16 @@
-use std::{sync::Arc, collections::BTreeMap};
+use std::{collections::BTreeMap, sync::Arc};
 
-use ast::ParseDb;
-use camp_parse::{
+use camp_ast::{
     CampResult, {self as ast},
 };
-pub use camp_parse::{CampsiteId, EnumId, FunctionId, ImplId, ItemId, ModId, StructId, TraitId};
+pub use camp_ast::{CampsiteId, EnumId, FunctionId, ImplId, ItemId, ModId, StructId, TraitId};
 use maplit::btreemap;
 
-use crate::{resolver::{ResolveContext, Resolver}, TyKind};
 use crate::HirDb;
+use crate::{
+    resolver::{ResolveContext, Resolver},
+    TyKind,
+};
 
 pub fn campsite_hir(db: &dyn HirDb, id: CampsiteId) -> CampResult<Arc<Mod>> {
     db.mod_hir(db.campsite_root_mod_id(id))
@@ -19,7 +21,7 @@ pub fn mod_hir(db: &dyn HirDb, id: ModId) -> CampResult<Arc<Mod>> {
     let mut modules = btreemap![];
     let mut structs = btreemap![];
     let mut enums = btreemap![];
-    let mut functions = btreemap![];;
+    let mut functions = btreemap![];
     let mut traits = btreemap![];
     let mut impls = btreemap![];
 
@@ -27,43 +29,35 @@ pub fn mod_hir(db: &dyn HirDb, id: ModId) -> CampResult<Arc<Mod>> {
         match item {
             ast::ModuleItem::Mod(m) => {
                 modules.insert(m.id, db.mod_hir(m.id)?);
-            },
+            }
             ast::ModuleItem::Struct(s) => {
                 structs.insert(s.id, db.struct_hir(s.id)?);
-            },
+            }
             ast::ModuleItem::Enum(e) => {
                 enums.insert(e.id, db.enum_hir(e.id)?);
-            },
+            }
             ast::ModuleItem::Function(f) => {
                 functions.insert(f.id, db.function_hir(f.id)?);
-            },
+            }
             ast::ModuleItem::Trait(t) => {
                 traits.insert(t.id, db.trait_hir(t.id)?);
-            },
-            ast::ModuleItem::Impl(i) =>{
+            }
+            ast::ModuleItem::Impl(i) => {
                 impls.insert(i.id, db.impl_hir(i.id)?);
-            },
-            ast::ModuleItem::Extern(_) |
-            ast::ModuleItem::Use(_) => {},
+            }
+            ast::ModuleItem::Extern(_) | ast::ModuleItem::Use(_) => {}
         }
     }
 
-    Ok(Arc::new(Mod {
-        modules,
-        structs,
-        enums,
-        functions,
-        traits,
-        impls,
-    }))
+    Ok(Arc::new(Mod { modules, structs, enums, functions, traits, impls }))
 }
 
 pub fn struct_hir(db: &dyn HirDb, id: StructId) -> CampResult<Arc<Struct>> {
     /*let s = db.struct_ast(id)?;
-    
+
     let mut resolver = Resolver::new(ItemContext::new(db, id));
     resolver.init_generics(s.generics.as_ref());
-    
+
     let generics = rcx.generics();
     let self_ty = resolver.record_ty(Ty {
         id: resolver.fresh_ty_id(),

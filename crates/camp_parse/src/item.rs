@@ -1,36 +1,21 @@
 use std::sync::Arc;
 
+use camp_ast::{punctuated::Punctuated, *};
 pub use camp_lex::tok::Token as RawToken;
-use camp_util::{bail, id_type, wrapper_id_type};
-use derivative::Derivative;
+use camp_util::bail;
 
-use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
 use crate::{
-    tok, CampResult, CampsiteId, Expr, ExprContext, ExprLiteral, Function, ParseAttrs, ParseDb,
-    ParseError, Path, Signature, Span, Supertraits, TraitTy, Ty, Visibility,
+    do_not_expect_visibility, expr_block,
+    parser::{Parse, ParseBuffer, ShouldParse},
+    result::ParseError,
+    ExprContext, ParseDb,
 };
-
-id_type!(pub ModId);
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum ModDecl {
-    CampsiteRoot(CampsiteId),
-    Submod(Arc<SubmodDecl>),
-}
-
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub struct SubmodDecl {
-    pub id: ItemId,
-    pub viz: Visibility,
-    pub mod_token: tok::Mod,
-    pub name: tok::Ident,
-}
 
 impl Parse for SubmodDecl {
     type Context = ItemId;
 
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: ItemId) -> CampResult<Self> {
-        Attribute::do_not_expect(input)?;
+        do_not_expect_attribute(input)?;
 
         Ok(SubmodDecl {
             id: ctx,
@@ -41,28 +26,17 @@ impl Parse for SubmodDecl {
     }
 }
 
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
+pub fn mod_ast_from_file(db: &dyn ParseDb, id: ModId) -> CampResult<Arc<Mod>> {
+    let file_id = db.mod_file(id)?;
 
-pub struct Mod {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: ModId,
-    pub items: Vec<ModuleItem>,
-}
+    let contents = db.open_file(file_id)?;
+    let buf = camp_lex::lex(file_id, &contents)?;
 
-impl Mod {
-    pub fn mod_ast_from_file(db: &dyn ParseDb, id: ModId) -> CampResult<Arc<Mod>> {
-        let file_id = db.mod_file(id)?;
+    let mut input = ParseBuffer::new(db, &buf);
+    let m = input.parse_with(id)?;
+    assert!(input.is_empty());
 
-        let contents = db.open_file(file_id)?;
-        let buf = camp_lex::lex(file_id, &contents)?;
-
-        let mut input = ParseBuffer::new(db, &buf);
-        let m = input.parse_with(id)?;
-        assert!(input.is_empty());
-
-        Ok(m)
-    }
+    Ok(m)
 }
 
 impl Parse for Mod {
@@ -82,41 +56,12 @@ impl Parse for Mod {
     }
 }
 
-id_type!(pub ItemId);
-
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct ItemDecl {
-    pub mod_id: ModId,
-    pub idx: usize,
-}
-
-#[derive(Clone, Hash, PartialEq, Eq, Derivative)]
-#[derivative(Debug)]
-pub enum ModuleItem {
-    #[derivative(Debug = "transparent")]
-    Mod(Arc<Mod>),
-    #[derivative(Debug = "transparent")]
-    Extern(Arc<Extern>),
-    #[derivative(Debug = "transparent")]
-    Use(Arc<Use>),
-    #[derivative(Debug = "transparent")]
-    Struct(Arc<Struct>),
-    #[derivative(Debug = "transparent")]
-    Enum(Arc<Enum>),
-    #[derivative(Debug = "transparent")]
-    Function(Arc<Function>),
-    #[derivative(Debug = "transparent")]
-    Trait(Arc<Trait>),
-    #[derivative(Debug = "transparent")]
-    Impl(Arc<Impl>),
-}
-
 impl Parse for ModuleItem {
     type Context = ItemId;
 
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: ItemId) -> CampResult<Self> {
         let mut lookahead = input.clone();
-        let _attrs = Attribute::parse_many(&mut lookahead)?;
+        let _attrs = parse_many_attribute(&mut lookahead)?;
         let _viz: Visibility = lookahead.parse()?;
 
         Ok(if lookahead.peek::<tok::Mod>() {
@@ -157,42 +102,19 @@ impl Parse for ModuleItem {
     }
 }
 
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct Attribute {
-    pub hash_tok: tok::Hash,
-    pub lsq_tok: tok::LSq,
-    pub inner: AttributeInner,
-    pub rsq_tok: tok::RSq,
+pub fn parse_many_attribute(input: &mut ParseBuffer<'_>) -> CampResult<Vec<Attribute>> {
+    let mut attrs = vec![];
+    while let Some(attr) = input.parse()? {
+        attrs.push(attr);
+    }
+    Ok(attrs)
 }
 
-impl Attribute {
-    pub fn span(&self) -> Span {
-        self.hash_tok.span.until(self.rsq_tok.span)
-    }
-
-    pub fn name(&self) -> &str {
-        match &self.inner {
-            AttributeInner::NameValue { ident, .. } | AttributeInner::List { ident, .. } => {
-                &ident.ident
-            }
-        }
-    }
-
-    pub fn parse_many(input: &mut ParseBuffer<'_>) -> CampResult<Vec<Attribute>> {
-        let mut attrs = vec![];
-        while let Some(attr) = input.parse()? {
-            attrs.push(attr);
-        }
-        Ok(attrs)
-    }
-
-    pub fn do_not_expect(input: &mut ParseBuffer<'_>) -> CampResult<()> {
-        if let Some(attr) = input.parse::<Option<Attribute>>()? {
-            bail!(ParseError::UnexpectedAttr { name: attr.name().to_owned(), span: attr.span() });
-        } else {
-            Ok(())
-        }
+pub fn do_not_expect_attribute(input: &mut ParseBuffer<'_>) -> CampResult<()> {
+    if let Some(attr) = input.parse::<Option<Attribute>>()? {
+        bail!(ParseError::UnexpectedAttr { name: attr.name().to_owned(), span: attr.span() });
+    } else {
+        Ok(())
     }
 }
 
@@ -214,22 +136,6 @@ impl ShouldParse for Attribute {
     }
 }
 
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub enum AttributeInner {
-    NameValue {
-        ident: tok::Ident,
-        eq_tok: tok::Eq,
-        lit: ExprLiteral,
-    },
-    List {
-        ident: tok::Ident,
-        lparen_tok: tok::LParen,
-        contents: Vec<RawToken>,
-        rparen_tok: tok::RParen,
-    },
-}
-
 impl Parse for AttributeInner {
     type Context = ();
 
@@ -242,26 +148,11 @@ impl Parse for AttributeInner {
     }
 }
 
-wrapper_id_type!(pub ExternId => ItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct Extern {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: ExternId,
-    pub viz: Visibility,
-    pub extern_tok: tok::Extern,
-    pub site_tok: tok::Site,
-    pub name: tok::Ident,
-    pub rename: Option<UseRename>,
-    pub semi_tok: tok::Semicolon,
-}
-
 impl Parse for Extern {
     type Context = ExternId;
 
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: ExternId) -> CampResult<Self> {
-        Attribute::do_not_expect(input)?;
+        do_not_expect_attribute(input)?;
 
         Ok(Extern {
             id: ctx,
@@ -275,25 +166,11 @@ impl Parse for Extern {
     }
 }
 
-wrapper_id_type!(pub UseId => ItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct Use {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: UseId,
-    pub viz: Visibility,
-    pub use_tok: tok::Use,
-    pub path: Path,
-    pub rename: Option<UseRename>,
-    pub semi_tok: tok::Semicolon,
-}
-
 impl Parse for Use {
     type Context = UseId;
 
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: UseId) -> CampResult<Self> {
-        Attribute::do_not_expect(input)?;
+        do_not_expect_attribute(input)?;
 
         Ok(Use {
             id: ctx,
@@ -304,18 +181,6 @@ impl Parse for Use {
             semi_tok: input.parse()?,
         })
     }
-}
-
-impl Use {
-    pub fn span(&self) -> Span {
-        self.use_tok.span.until(self.semi_tok.span)
-    }
-}
-
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub struct UseRename {
-    pub as_tok: tok::As,
-    pub ident: tok::Ident,
 }
 
 impl Parse for UseRename {
@@ -330,13 +195,6 @@ impl ShouldParse for UseRename {
     fn should_parse(input: &mut ParseBuffer<'_>) -> bool {
         input.peek::<tok::As>()
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct GenericsDecl {
-    pub lt_tok: tok::Lt,
-    pub generics: Punctuated<GenericDecl, tok::Comma>,
-    pub gt_tok: tok::Gt,
 }
 
 impl Parse for GenericsDecl {
@@ -376,12 +234,6 @@ impl ShouldParse for GenericsDecl {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub enum GenericDecl {
-    Lifetime(GenericLifetime),
-    Ident(GenericType),
-}
-
 impl Parse for GenericDecl {
     type Context = ();
 
@@ -396,24 +248,12 @@ impl Parse for GenericDecl {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct GenericLifetime {
-    pub lifetime: tok::Lifetime,
-    pub maybe_bounds: Option<Supertraits>,
-}
-
 impl Parse for GenericLifetime {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(GenericLifetime { lifetime: input.parse()?, maybe_bounds: input.parse()? })
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct GenericType {
-    pub ident: tok::Ident,
-    pub maybe_bounds: Option<Supertraits>,
 }
 
 impl Parse for GenericType {
@@ -424,28 +264,11 @@ impl Parse for GenericType {
     }
 }
 
-wrapper_id_type!(pub StructId => ItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct Struct {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: StructId,
-    pub attrs: Vec<Attribute>,
-    pub viz: Visibility,
-    pub struct_tok: tok::Struct,
-    pub ident: tok::Ident,
-    pub generics: Option<GenericsDecl>,
-    pub fields: Fields,
-    pub where_clause: Option<WhereClause>,
-    pub semi_tok: Option<tok::Semicolon>,
-}
-
 impl Parse for Struct {
     type Context = StructId;
 
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: StructId) -> CampResult<Self> {
-        let attrs = Attribute::parse_many(input)?;
+        let attrs = parse_many_attribute(input)?;
         let viz = input.parse()?;
         let struct_tok = input.parse()?;
         let ident = input.parse()?;
@@ -479,16 +302,6 @@ impl Parse for Struct {
     }
 }
 
-#[derive(Derivative, PartialEq, Eq, Hash)]
-#[derivative(Debug)]
-pub enum Fields {
-    #[derivative(Debug = "transparent")]
-    Named(FieldsNamed),
-    #[derivative(Debug = "transparent")]
-    Positional(FieldsPositional),
-    None,
-}
-
 impl Parse for Fields {
     type Context = ();
 
@@ -503,13 +316,6 @@ impl Parse for Fields {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct FieldsNamed {
-    pub lcurly_tok: tok::LCurly,
-    pub fields: Punctuated<FieldNamed, tok::Comma>,
-    pub rcurly_tok: tok::RCurly,
-}
-
 impl Parse for FieldsNamed {
     type Context = ();
 
@@ -518,14 +324,6 @@ impl Parse for FieldsNamed {
 
         Ok(FieldsNamed { lcurly_tok, fields: contents.parse_punctuated(rcurly_tok)?, rcurly_tok })
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct FieldNamed {
-    pub viz: Visibility,
-    pub ident: tok::Ident,
-    pub colon_tok: tok::Colon,
-    pub ty: Ty,
 }
 
 impl Parse for FieldNamed {
@@ -539,13 +337,6 @@ impl Parse for FieldNamed {
             ty: input.parse()?,
         })
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct FieldsPositional {
-    pub lparen_tok: tok::LParen,
-    pub fields: Punctuated<FieldPositional, tok::Comma>,
-    pub rparen_tok: tok::RParen,
 }
 
 impl Parse for FieldsPositional {
@@ -562,24 +353,12 @@ impl Parse for FieldsPositional {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct FieldPositional {
-    pub viz: Visibility,
-    pub ty: Ty,
-}
-
 impl Parse for FieldPositional {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(FieldPositional { viz: input.parse()?, ty: input.parse()? })
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct WhereClause {
-    pub where_tok: tok::Where,
-    pub restrictions: Punctuated<TypeRestriction, tok::Comma>,
 }
 
 impl Parse for WhereClause {
@@ -613,24 +392,12 @@ impl ShouldParse for WhereClause {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct TypeRestriction {
-    pub subject: TyOrLifetime,
-    pub trailing_traits: Supertraits,
-}
-
 impl Parse for TypeRestriction {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(TypeRestriction { subject: input.parse()?, trailing_traits: input.parse()? })
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub enum TyOrLifetime {
-    Ty(Ty),
-    Lifetime(tok::Lifetime),
 }
 
 impl Parse for TyOrLifetime {
@@ -645,29 +412,11 @@ impl Parse for TyOrLifetime {
     }
 }
 
-wrapper_id_type!(pub EnumId => ItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct Enum {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: EnumId,
-    pub attrs: Vec<Attribute>,
-    pub viz: Visibility,
-    pub enum_tok: tok::Enum,
-    pub ident: tok::Ident,
-    pub generics: Option<GenericsDecl>,
-    pub where_clause: Option<WhereClause>,
-    pub lcurly_tok: tok::LCurly,
-    pub variants: Punctuated<EnumVariant, tok::Comma>,
-    pub rcurly_tok: tok::RCurly,
-}
-
 impl Parse for Enum {
     type Context = EnumId;
 
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: EnumId) -> CampResult<Self> {
-        let attrs = Attribute::parse_many(input)?;
+        let attrs = parse_many_attribute(input)?;
         let viz = input.parse()?;
         let enum_tok = input.parse()?;
         let ident = input.parse()?;
@@ -691,12 +440,6 @@ impl Parse for Enum {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct EnumVariant {
-    pub ident: tok::Ident,
-    pub fields: Fields,
-}
-
 impl Parse for EnumVariant {
     type Context = ();
 
@@ -705,30 +448,11 @@ impl Parse for EnumVariant {
     }
 }
 
-wrapper_id_type!(pub TraitId => ItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct Trait {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: TraitId,
-    pub attrs: Vec<Attribute>,
-    pub viz: Visibility,
-    pub fn_tok: tok::Trait,
-    pub ident: tok::Ident,
-    pub generics: Option<GenericsDecl>,
-    pub supertraits: Option<Supertraits>,
-    pub where_clause: Option<WhereClause>,
-    pub lcurly_tok: tok::LCurly,
-    pub trait_items: Vec<TraitItem>,
-    pub rcurly_tok: tok::RCurly,
-}
-
 impl Parse for Trait {
     type Context = TraitId;
 
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: TraitId) -> CampResult<Self> {
-        let attrs = Attribute::parse_many(input)?;
+        let attrs = parse_many_attribute(input)?;
         let viz = input.parse()?;
         let fn_tok = input.parse()?;
         let ident = input.parse()?;
@@ -764,28 +488,11 @@ impl Parse for Trait {
     }
 }
 
-id_type!(pub TraitItemId);
-
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct TraitItemDecl {
-    trait_id: TraitId,
-    idx: usize,
-}
-
-#[derive(Derivative, PartialEq, Eq, Hash)]
-#[derivative(Debug)]
-pub enum TraitItem {
-    #[derivative(Debug = "transparent")]
-    Fn(Arc<TraitFunction>),
-    #[derivative(Debug = "transparent")]
-    Type(Arc<TraitType>),
-}
-
 impl Parse for TraitItem {
     type Context = TraitItemId;
 
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: TraitItemId) -> CampResult<Self> {
-        Visibility::do_not_expect(input)?;
+        do_not_expect_visibility(input)?;
 
         Ok(if input.peek::<tok::Fn>() {
             TraitItem::Fn(input.parse_with(ctx.into())?)
@@ -795,17 +502,6 @@ impl Parse for TraitItem {
             input.error_exhausted()?;
         })
     }
-}
-
-wrapper_id_type!(pub TraitFnId => TraitItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct TraitFunction {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: TraitFnId,
-    pub signature: Signature,
-    pub semi_tok: tok::Semicolon,
 }
 
 impl Parse for TraitFunction {
@@ -818,19 +514,6 @@ impl Parse for TraitFunction {
             semi_tok: input.parse()?,
         })
     }
-}
-
-wrapper_id_type!(pub TraitTypeId => TraitItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct TraitType {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: TraitTypeId,
-    pub type_tok: tok::Type,
-    pub ident: tok::Ident,
-    pub supertraits: Option<Supertraits>,
-    pub semi_tok: tok::Semicolon,
 }
 
 impl Parse for TraitType {
@@ -847,30 +530,13 @@ impl Parse for TraitType {
     }
 }
 
-wrapper_id_type!(pub ImplId => ItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct Impl {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: ImplId,
-    pub attrs: Vec<Attribute>,
-    pub impl_tok: tok::Impl,
-    pub generics: Option<GenericsDecl>,
-    pub impl_trait: Option<ImplTrait>,
-    pub ty: Ty,
-    pub lcurly_tok: tok::LCurly,
-    pub impl_items: Vec<ImplItem>,
-    pub rcurly_tok: tok::RCurly,
-}
-
 impl Parse for Impl {
     type Context = ImplId;
 
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: ImplId) -> CampResult<Self> {
-        Visibility::do_not_expect(input)?;
+        do_not_expect_visibility(input)?;
 
-        let attrs = Attribute::parse_many(input)?;
+        let attrs = parse_many_attribute(input)?;
         let impl_tok = input.parse()?;
         let generics = input.parse()?;
 
@@ -918,29 +584,6 @@ impl Parse for Impl {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct ImplTrait {
-    trait_ty: TraitTy,
-    for_tok: tok::For,
-}
-
-id_type!(pub ImplItemId);
-
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct ImplItemDecl {
-    impl_id: ImplId,
-    idx: usize,
-}
-
-#[derive(Derivative, PartialEq, Eq, Hash)]
-#[derivative(Debug)]
-pub enum ImplItem {
-    #[derivative(Debug = "transparent")]
-    Function(Arc<ImplFunction>),
-    #[derivative(Debug = "transparent")]
-    Type(Arc<ImplType>),
-}
-
 impl Parse for ImplItem {
     type Context = ImplItemId;
 
@@ -958,17 +601,6 @@ impl Parse for ImplItem {
     }
 }
 
-wrapper_id_type!(pub ImplFnId => ImplItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct ImplFunction {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: ImplFnId,
-    pub signature: Signature,
-    pub body: Expr,
-}
-
 impl Parse for ImplFunction {
     type Context = ImplFnId;
 
@@ -976,23 +608,9 @@ impl Parse for ImplFunction {
         Ok(ImplFunction {
             id: ctx,
             signature: input.parse_with(ParseAttrs(false))?,
-            body: Expr::expr_block(input, ExprContext::any_expr())?,
+            body: expr_block(input, ExprContext::any_expr())?,
         })
     }
-}
-
-wrapper_id_type!(pub ImplTypeId => ImplItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct ImplType {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: ImplTypeId,
-    pub type_tok: tok::Type,
-    pub ident: tok::Ident,
-    pub eq_tok: tok::Eq,
-    pub ty: Ty,
-    pub semi_tok: tok::Semicolon,
 }
 
 impl Parse for ImplType {

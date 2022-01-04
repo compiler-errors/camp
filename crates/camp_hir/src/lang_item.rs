@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use camp_ast::{self as ast, CampResult, Span};
 use camp_import_resolve::Item;
-use camp_parse::{self as ast, CampResult, Span};
 use camp_util::bail;
 use maplit::hashmap;
 

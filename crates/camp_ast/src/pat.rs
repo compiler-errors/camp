@@ -1,7 +1,6 @@
-use camp_util::bail;
 use derivative::Derivative;
 
-use crate::{tok, CampResult, Path, punctuated::Punctuated};
+use crate::{punctuated::Punctuated, tok, Path};
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]
@@ -26,8 +25,8 @@ pub enum Pat {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct PatPath {
-    mut_tok: Option<tok::Mut>,
-    path: Path,
+    pub mut_tok: Option<tok::Mut>,
+    pub path: Path,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -39,13 +38,13 @@ pub enum PatLit {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct PatOr {
-    pats: Punctuated<Pat, tok::Pipe>,
+    pub pats: Punctuated<Pat, tok::Pipe>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct PatRange {
-    left: Option<Box<Pat>>,
-    right: RangeEnding,
+    pub left: Option<Box<Pat>>,
+    pub right: RangeEnding,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -57,36 +56,36 @@ pub enum RangeEnding {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct PatGroup {
-    lparen_tok: tok::LParen,
-    tys: Punctuated<Pat, tok::Comma>,
-    rparen_tok: tok::RParen,
+    pub lparen_tok: tok::LParen,
+    pub tys: Punctuated<Pat, tok::Comma>,
+    pub rparen_tok: tok::RParen,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct PatStruct {
-    path: Path,
-    fields: PatFields,
+    pub path: Path,
+    pub fields: PatFields,
 }
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]
 pub enum PatFields {
     #[derivative(Debug = "transparent")]
-    Named(FieldsNamed),
+    Named(PatFieldsNamed),
     #[derivative(Debug = "transparent")]
-    Positional(FieldsPositional),
+    Positional(PatFieldsPositional),
     None,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct FieldsNamed {
+pub struct PatFieldsNamed {
     pub lcurly_tok: tok::LCurly,
-    pub fields: Punctuated<FieldNamed, tok::Comma>,
+    pub fields: Punctuated<PatFieldNamed, tok::Comma>,
     pub rcurly_tok: tok::RCurly,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct FieldNamed {
+pub struct PatFieldNamed {
     pub ident: tok::Ident,
     pub pat: Option<NamedEnding>,
 }
@@ -98,7 +97,7 @@ pub struct NamedEnding {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct FieldsPositional {
+pub struct PatFieldsPositional {
     pub lparen_tok: tok::LParen,
     pub fields: Punctuated<Pat, tok::Comma>,
     pub rparen_tok: tok::RParen,
@@ -106,7 +105,7 @@ pub struct FieldsPositional {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct PatArray {
-    lsq_tok: tok::LSq,
-    tys: Punctuated<Pat, tok::Comma>,
-    rsq_tok: tok::RSq,
+    pub lsq_tok: tok::LSq,
+    pub tys: Punctuated<Pat, tok::Comma>,
+    pub rsq_tok: tok::RSq,
 }

@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 camp_parse = { path = "../camp_parse" }
 camp_util = { path = "../camp_util" }
+camp_ast = { path = "../camp_ast" }
 camp_import_resolve = { path = "../camp_import_resolve" }
 codespan-derive = "0.1.1"
 maplit = "1.0.2"

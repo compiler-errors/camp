@@ -1,4 +1,4 @@
-use camp_parse::{CampError, FileId, Span};
+use camp_ast::{CampError, FileId, Span};
 use camp_util::IntoCampError;
 use codespan_derive::IntoDiagnostic;
 

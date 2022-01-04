@@ -1,21 +1,14 @@
+use camp_ast::{tok, Mutability, Visibility, VisibilityRange, VisibilityRangeKind};
 use camp_util::bail;
 
 use crate::parser::{Parse, ParseBuffer, ShouldParse};
-use crate::{tok, CampResult, ParseError};
+use crate::{CampResult, ParseError};
 
-#[derive(Debug, Hash, Eq, PartialEq)]
-pub enum Visibility {
-    Pub(tok::Pub, Option<VisibilityRange>),
-    Private,
-}
-
-impl Visibility {
-    pub fn do_not_expect(input: &mut ParseBuffer<'_>) -> CampResult<()> {
-        if input.peek::<tok::Pub>() {
-            bail!(ParseError::UnexpectedViz(input.next_span()))
-        } else {
-            Ok(())
-        }
+pub fn do_not_expect_visibility(input: &mut ParseBuffer<'_>) -> CampResult<()> {
+    if input.peek::<tok::Pub>() {
+        bail!(ParseError::UnexpectedViz(input.next_span()))
+    } else {
+        Ok(())
     }
 }
 
@@ -29,13 +22,6 @@ impl Parse for Visibility {
             Ok(Visibility::Private)
         }
     }
-}
-
-#[derive(Debug, Hash, Eq, PartialEq)]
-pub struct VisibilityRange {
-    pub lparen_tok: tok::LParen,
-    pub kind: VisibilityRangeKind,
-    pub rparen_tok: tok::RParen,
 }
 
 impl Parse for VisibilityRange {
@@ -56,13 +42,6 @@ impl ShouldParse for VisibilityRange {
     }
 }
 
-#[derive(Debug, Hash, Eq, PartialEq)]
-pub enum VisibilityRangeKind {
-    Mod(tok::Mod),
-    Super(tok::Super),
-    Site(tok::Site),
-}
-
 impl Parse for VisibilityRangeKind {
     type Context = ();
 
@@ -77,12 +56,6 @@ impl Parse for VisibilityRangeKind {
             input.error_exhausted()?
         })
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub enum Mutability {
-    Mut(tok::Mut),
-    Const,
 }
 
 impl Parse for Mutability {

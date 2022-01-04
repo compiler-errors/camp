@@ -2,11 +2,11 @@ use std::collections::BTreeMap;
 use std::iter::Peekable;
 use std::sync::Arc;
 
-use camp_import_resolve::Item;
-use camp_parse::{
+use camp_ast::{
     self as ast, CampResult, EnumId, FunctionId, ItemId, ModId, PathSegment, Span, StructId,
     TraitId,
 };
+use camp_import_resolve::Item;
 use camp_util::{bail, IteratorExt};
 use maplit::{btreemap, hashmap};
 
@@ -126,7 +126,10 @@ impl<T: ResolveContext> Resolver<T> {
                             break;
                         }
                     },
-                    s => bail!(LoweringError::UnrecognizedPathSegment(s.span(), "identifier or generics")),
+                    s => bail!(LoweringError::UnrecognizedPathSegment(
+                        s.span(),
+                        "identifier or generics"
+                    )),
                 }
             } else {
                 break;

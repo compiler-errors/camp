@@ -3,7 +3,7 @@ mod item;
 mod path;
 mod ty;
 
-pub use camp_parse::Span;
+pub use camp_ast::Span;
 pub use generic::*;
 pub use item::*;
 pub use path::*;

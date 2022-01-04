@@ -1,5 +1,3 @@
-use camp_util::bail;
-
 use crate::tok;
 
 #[derive(Debug, Hash, Eq, PartialEq)]

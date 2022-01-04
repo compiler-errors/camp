@@ -1,7 +1,6 @@
-use camp_lex::tok as lex;
+use crate::{CampResult, Span};
 
-use crate::Span;
-
+#[macro_export]
 macro_rules! foreach_identifier {
     ($macro:ident) => {
         $macro! {
@@ -40,9 +39,10 @@ macro_rules! foreach_identifier {
             "self" => LSelf,
             _ => Ident,
         }
-    }
+    };
 }
 
+#[macro_export]
 macro_rules! foreach_symbol {
     ($macro:ident) => {
         $macro! {
@@ -75,9 +75,10 @@ macro_rules! foreach_symbol {
             "%" => Percent,
             "#" => Hash,
         }
-    }
+    };
 }
 
+#[macro_export]
 macro_rules! foreach_delimiter {
     ($macro:ident) => {
         $macro! {
@@ -85,9 +86,10 @@ macro_rules! foreach_delimiter {
             Curly, LCurly, "{", RCurly, "}";
             Sq,    LSq,    "[", RSq,    "]";
         }
-    }
+    };
 }
 
+#[macro_export]
 macro_rules! foreach_literal {
     ($macro:ident) => {
         $macro! {
@@ -95,7 +97,7 @@ macro_rules! foreach_literal {
             Lifetime,  "lifetime";
             StringLit, "string";
         }
-    }
+    };
 }
 
 macro_rules! declare_identifiers {
@@ -136,6 +138,12 @@ macro_rules! declare_symbols {
             pub struct $name {
                 #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
                 pub span: Span,
+            }
+
+            impl From<Span> for $name {
+                fn from(span: Span) -> Self {
+                    Self { span }
+                }
             }
         )*
     }
@@ -179,3 +187,15 @@ foreach_identifier!(declare_identifiers);
 foreach_symbol!(declare_symbols);
 foreach_delimiter!(declare_delimiters);
 foreach_literal!(declare_literals);
+
+impl StringLit {
+    pub fn remove_quotes(&self) -> &str {
+        self.value.strip_prefix('"').unwrap().strip_suffix('"').unwrap()
+    }
+}
+
+impl Number {
+    pub fn expect_usize(&self) -> CampResult<usize> {
+        todo!()
+    }
+}

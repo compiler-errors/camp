@@ -1,8 +1,10 @@
-use std::sync::Arc;
 use camp_files::Span;
 use derivative::Derivative;
+use std::sync::Arc;
 
-use crate::{tok, Path, TyElaborated, punctuated::Punctuated, PathSegment, Pat, Ty, Generics, ReturnTy};
+use crate::{
+    punctuated::Punctuated, tok, Generics, Pat, Path, PathSegment, ReturnTy, Ty, TyElaborated,
+};
 
 #[derive(Copy, Clone)]
 #[repr(usize)]
@@ -87,6 +89,113 @@ pub struct ExprBlock {
     pub rcurly_tok: tok::RCurly,
 }
 
+impl Expr {
+    // TODO: move these to parser
+    pub fn needs_semicolon(&self) -> bool {
+        match self {
+            Expr::Block(_)
+            | Expr::If(_)
+            | Expr::Loop(_)
+            | Expr::While(_)
+            | Expr::For(_)
+            | Expr::Match(_) => false,
+
+            _ => true,
+        }
+    }
+
+    pub fn is_callable(&self) -> bool {
+        match self {
+            Expr::Path(_)
+            | Expr::Elaborated(_)
+            | Expr::Literal(_)
+            | Expr::Group(_)
+            | Expr::Array(_)
+            | Expr::Index(_)
+            | Expr::Access(_)
+            | Expr::Call(_) => true,
+
+            Expr::Block(_)
+            | Expr::If(_)
+            | Expr::Loop(_)
+            | Expr::While(_)
+            | Expr::For(_)
+            | Expr::Match(_)
+            | Expr::Let(_)
+            | Expr::Unary(_)
+            | Expr::Binary(_)
+            | Expr::Constructor(_)
+            | Expr::Break(_)
+            | Expr::Continue(_)
+            | Expr::Return(_)
+            | Expr::Closure(_)
+            | Expr::Cast(_)
+            | Expr::RangeTrailing(_)
+            | Expr::RangeInclusive(_)
+            | Expr::Range(_) => false,
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        match self {
+            Expr::Block(e) => e.lcurly_tok.span.until(e.rcurly_tok.span),
+            Expr::Path(e) => e
+                .path
+                .first()
+                .expect("expected path to have segments")
+                .span()
+                .until(e.path.last().expect("expected path to have segments").span()),
+            Expr::Elaborated(e) => {
+                e.ty.lt_tok
+                    .span
+                    .until(e.path.last().expect("expected path to have segments").span())
+            }
+            Expr::Literal(ExprLiteral::Number(n)) => n.span,
+            Expr::Literal(ExprLiteral::String(s)) => s.span,
+            Expr::Group(e) => e.lparen_tok.span.until(e.rparen_tok.span),
+            Expr::Array(e) => e.lsq_tok.span.until(e.rsq_tok.span),
+            Expr::Let(e) => e.let_tok.span.until(e.expr.span()),
+            Expr::Match(e) => e.match_tok.span.until(e.rcurly_tok.span),
+            Expr::If(e) => e
+                .if_tok
+                .span
+                .until(e.branch.span())
+                .until_maybe(e.else_branch.as_ref().map(|e| e.branch.span())),
+            Expr::Loop(e) => e.loop_tok.span.until(e.branch.span()),
+            Expr::While(e) => e.while_tok.span.until(e.branch.span()),
+            Expr::For(e) => e.for_tok.span.until(e.branch.span()),
+            Expr::Unary(e) => e.op.span().until(e.expr.span()),
+            Expr::Binary(e) => e.left.span().until(e.right.span()),
+            Expr::RangeTrailing(e) => {
+                e.dot_dot_dot_tok.span.until_maybe(e.expr.as_ref().map(|e| e.span()))
+            }
+            Expr::RangeInclusive(e) => e
+                .right
+                .span()
+                .until(e.dot_dot_eq_tok.span)
+                .until_maybe(e.left.as_ref().map(|e| e.span())),
+            Expr::Range(e) => e
+                .right
+                .span()
+                .until(e.dot_dot_tok.span)
+                .until_maybe(e.left.as_ref().map(|e| e.span())),
+            Expr::Index(e) => e.left.span().until(e.rsq_tok.span),
+            Expr::Call(e) => e.expr.span().until(e.rparen_tok.span),
+            Expr::Constructor(e) => e.path.span().until(e.rcurly_tok.span),
+            Expr::Access(e) => e.expr.span().until(e.kind.span()),
+            Expr::Break(e) => e
+                .break_tok
+                .span
+                .until_maybe(e.label.as_ref().map(|e| e.span))
+                .until_maybe(e.expr.as_ref().map(|e| e.span())),
+            Expr::Continue(e) => e.continue_tok.span.until_maybe(e.label.as_ref().map(|e| e.span)),
+            Expr::Return(e) => e.return_tok.span.until_maybe(e.expr.as_ref().map(|e| e.span())),
+            Expr::Closure(e) => e.lpipe_tok.span.until(e.expr.span()),
+            Expr::Cast(e) => e.expr.span().until(e.ty.span()),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprElaborated {
     pub ty: TyElaborated,
@@ -119,86 +228,86 @@ pub struct ExprArray {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprLet {
-    let_tok: tok::Let,
-    pat: Pat,
-    maybe_ty: Option<TypeAnnotation>,
-    eq_tok: tok::Eq,
-    expr: Arc<Expr>,
+    pub let_tok: tok::Let,
+    pub pat: Pat,
+    pub maybe_ty: Option<TypeAnnotation>,
+    pub eq_tok: tok::Eq,
+    pub expr: Arc<Expr>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct TypeAnnotation {
-    colon_tok: tok::Colon,
-    ty: Ty,
+    pub colon_tok: tok::Colon,
+    pub ty: Ty,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprMatch {
-    match_tok: tok::Match,
-    expr: Arc<Expr>,
-    lcurly_tok: tok::LCurly,
-    arms: Vec<MatchArm>,
-    rcurly_tok: tok::RCurly,
+    pub match_tok: tok::Match,
+    pub expr: Arc<Expr>,
+    pub lcurly_tok: tok::LCurly,
+    pub arms: Vec<MatchArm>,
+    pub rcurly_tok: tok::RCurly,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct MatchArm {
     pub pat: Pat,
     pub maybe_ty: Option<TypeAnnotation>,
-    arrow_tok: tok::BigArrow,
+    pub arrow_tok: tok::BigArrow,
     pub expr: Arc<Expr>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprIf {
-    if_tok: tok::If,
-    condition: Arc<Expr>,
-    branch: Arc<Expr>,
-    else_branch: Option<Else>,
+    pub if_tok: tok::If,
+    pub condition: Arc<Expr>,
+    pub branch: Arc<Expr>,
+    pub else_branch: Option<Else>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Else {
-    else_tok: tok::Else,
-    branch: Arc<Expr>,
+    pub else_tok: tok::Else,
+    pub branch: Arc<Expr>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprWhile {
-    label: Option<LoopLabel>,
-    while_tok: tok::While,
-    cond: Arc<Expr>,
-    branch: Arc<Expr>,
+    pub label: Option<LoopLabel>,
+    pub while_tok: tok::While,
+    pub cond: Arc<Expr>,
+    pub branch: Arc<Expr>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct LoopLabel {
-    lifetime: tok::Lifetime,
-    colon_tok: tok::Colon,
+    pub lifetime: tok::Lifetime,
+    pub colon_tok: tok::Colon,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprLoop {
-    label: Option<LoopLabel>,
-    loop_tok: tok::Loop,
-    branch: Arc<Expr>,
+    pub label: Option<LoopLabel>,
+    pub loop_tok: tok::Loop,
+    pub branch: Arc<Expr>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprFor {
-    label: Option<LoopLabel>,
-    for_tok: tok::For,
-    pat: Pat,
-    in_tok: tok::In,
-    expr: Arc<Expr>,
-    branch: Arc<Expr>,
+    pub label: Option<LoopLabel>,
+    pub for_tok: tok::For,
+    pub pat: Pat,
+    pub in_tok: tok::In,
+    pub expr: Arc<Expr>,
+    pub branch: Arc<Expr>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprAccess {
-    expr: Arc<Expr>,
-    dot_tok: tok::Dot,
-    kind: AccessKind,
+    pub expr: Arc<Expr>,
+    pub dot_tok: tok::Dot,
+    pub kind: AccessKind,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -220,14 +329,14 @@ impl AccessKind {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct AccessGenerics {
-    colon_colon_tok: tok::ColonColon,
-    generics: Generics,
+    pub colon_colon_tok: tok::ColonColon,
+    pub generics: Generics,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprUnary {
-    op: UnaryOperator,
-    expr: Arc<Expr>,
+    pub op: UnaryOperator,
+    pub expr: Arc<Expr>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -253,9 +362,9 @@ impl UnaryOperator {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprBinary {
-    left: Arc<Expr>,
-    op: BinaryOperator,
-    right: Arc<Expr>,
+    pub left: Arc<Expr>,
+    pub op: BinaryOperator,
+    pub right: Arc<Expr>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -280,97 +389,97 @@ pub enum BinaryOperator {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprRangeTrailing {
-    expr: Option<Arc<Expr>>,
-    dot_dot_dot_tok: tok::DotDotDot,
+    pub expr: Option<Arc<Expr>>,
+    pub dot_dot_dot_tok: tok::DotDotDot,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprRangeInclusive {
-    left: Option<Arc<Expr>>,
-    dot_dot_eq_tok: tok::DotDotEq,
-    right: Arc<Expr>,
+    pub left: Option<Arc<Expr>>,
+    pub dot_dot_eq_tok: tok::DotDotEq,
+    pub right: Arc<Expr>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprRange {
-    left: Option<Arc<Expr>>,
-    dot_dot_tok: tok::DotDot,
-    right: Arc<Expr>,
+    pub left: Option<Arc<Expr>>,
+    pub dot_dot_tok: tok::DotDot,
+    pub right: Arc<Expr>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprIndex {
-    left: Arc<Expr>,
-    lsq_tok: tok::LSq,
-    right: Arc<Expr>,
-    rsq_tok: tok::RSq,
+    pub left: Arc<Expr>,
+    pub lsq_tok: tok::LSq,
+    pub right: Arc<Expr>,
+    pub rsq_tok: tok::RSq,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprCall {
-    expr: Arc<Expr>,
-    lparen_tok: tok::LParen,
-    args: Punctuated<Expr, tok::Comma>,
-    rparen_tok: tok::RParen,
+    pub expr: Arc<Expr>,
+    pub lparen_tok: tok::LParen,
+    pub args: Punctuated<Expr, tok::Comma>,
+    pub rparen_tok: tok::RParen,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprBreak {
-    break_tok: tok::Break,
-    label: Option<tok::Lifetime>,
-    expr: Option<Arc<Expr>>,
+    pub break_tok: tok::Break,
+    pub label: Option<tok::Lifetime>,
+    pub expr: Option<Arc<Expr>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprContinue {
-    continue_tok: tok::Continue,
-    label: Option<tok::Lifetime>,
+    pub continue_tok: tok::Continue,
+    pub label: Option<tok::Lifetime>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprReturn {
-    return_tok: tok::Return,
-    expr: Option<Arc<Expr>>,
+    pub return_tok: tok::Return,
+    pub expr: Option<Arc<Expr>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprConstructor {
-    path: Path,
-    lcurly_tok: tok::LCurly,
-    args: Punctuated<ConstructorArg, tok::Comma>,
-    rcurly_tok: tok::RCurly,
+    pub path: Path,
+    pub lcurly_tok: tok::LCurly,
+    pub args: Punctuated<ConstructorArg, tok::Comma>,
+    pub rcurly_tok: tok::RCurly,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ConstructorArg {
-    ident: tok::Ident,
-    expr: Option<MemberExpr>,
+    pub ident: tok::Ident,
+    pub expr: Option<MemberExpr>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct MemberExpr {
-    colon_tok: tok::Colon,
-    expr: Expr,
+    pub colon_tok: tok::Colon,
+    pub expr: Expr,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprClosure {
-    lpipe_tok: tok::Pipe,
-    parameters: Punctuated<ClosureParameter, tok::Comma>,
-    rpipe_tok: tok::Pipe,
-    return_ty: Option<ReturnTy>,
-    expr: Arc<Expr>,
+    pub lpipe_tok: tok::Pipe,
+    pub parameters: Punctuated<ClosureParameter, tok::Comma>,
+    pub rpipe_tok: tok::Pipe,
+    pub return_ty: Option<ReturnTy>,
+    pub expr: Arc<Expr>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ClosureParameter {
-    pat: Pat,
-    ty: Option<TypeAnnotation>,
+    pub pat: Pat,
+    pub ty: Option<TypeAnnotation>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprCast {
-    expr: Arc<Expr>,
-    as_tok: tok::As,
-    ty: Ty,
+    pub expr: Arc<Expr>,
+    pub as_tok: tok::As,
+    pub ty: Ty,
 }

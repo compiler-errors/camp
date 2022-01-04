@@ -1,22 +1,13 @@
-use camp_util::wrapper_id_type;
-use derivative::Derivative;
-
-use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{
-    tok, Attribute, CampResult, Expr, ExprContext, GenericsDecl, ItemId, Pat, ReferencePrefix, Ty,
-    Visibility, WhereClause,
+use camp_ast::{
+    tok, Function, FunctionId, Parameter, ParameterNamed, ParameterSelf, ParameterSelfRef,
+    ParseAttrs, ReturnTy, Signature,
 };
 
-wrapper_id_type!(pub FunctionId => ItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct Function {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: FunctionId,
-    pub sig: Signature,
-    pub body: Expr,
-}
+use crate::{
+    do_not_expect_attribute, expr_block, parse_many_attribute,
+    parser::{Parse, ParseBuffer, ShouldParse},
+    CampResult, ExprContext,
+};
 
 impl Parse for Function {
     type Context = FunctionId;
@@ -25,25 +16,9 @@ impl Parse for Function {
         Ok(Function {
             id: ctx,
             sig: input.parse_with(ParseAttrs(true))?,
-            body: Expr::expr_block(input, ExprContext::any_expr())?,
+            body: expr_block(input, ExprContext::any_expr())?,
         })
     }
-}
-
-pub struct ParseAttrs(pub bool);
-
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub struct Signature {
-    pub attrs: Vec<Attribute>,
-    pub viz: Visibility,
-    pub fn_tok: tok::Fn,
-    pub ident: tok::Ident,
-    pub generics: Option<GenericsDecl>,
-    pub where_clause: Option<WhereClause>,
-    pub lparen_tok: tok::LParen,
-    pub parameters: Punctuated<Parameter, tok::Comma>,
-    pub rparen_tok: tok::RParen,
-    pub return_ty: Option<ReturnTy>,
 }
 
 impl Parse for Signature {
@@ -51,9 +26,9 @@ impl Parse for Signature {
 
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: ParseAttrs) -> CampResult<Self> {
         let attrs = if ctx.0 {
-            Attribute::parse_many(input)?
+            parse_many_attribute(input)?
         } else {
-            Attribute::do_not_expect(input)?;
+            do_not_expect_attribute(input)?;
             vec![]
         };
         let viz = input.parse()?;
@@ -76,17 +51,6 @@ impl Parse for Signature {
             return_ty: input.parse()?,
         })
     }
-}
-
-#[derive(Derivative, PartialEq, Eq, Hash)]
-#[derivative(Debug)]
-pub enum Parameter {
-    #[derivative(Debug = "transparent")]
-    Named(ParameterNamed),
-    #[derivative(Debug = "transparent")]
-    LSelf(ParameterSelf),
-    #[derivative(Debug = "transparent")]
-    SelfRef(ParameterSelfRef),
 }
 
 impl Parse for Parameter {
@@ -113,25 +77,12 @@ impl Parse for Parameter {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct ParameterNamed {
-    pub pat: Pat,
-    pub colon_tok: tok::Colon,
-    pub ty: Ty,
-}
-
 impl Parse for ParameterNamed {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(ParameterNamed { pat: input.parse()?, colon_tok: input.parse()?, ty: input.parse()? })
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct ParameterSelf {
-    pub mut_tok: Option<tok::Mut>,
-    pub self_tok: tok::LSelf,
 }
 
 impl Parse for ParameterSelf {
@@ -142,24 +93,12 @@ impl Parse for ParameterSelf {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct ParameterSelfRef {
-    pub prefix: ReferencePrefix,
-    pub self_tok: tok::LSelf,
-}
-
 impl Parse for ParameterSelfRef {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         Ok(ParameterSelfRef { prefix: input.parse()?, self_tok: input.parse()? })
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct ReturnTy {
-    pub arrow_tok: tok::Arrow,
-    pub ty: Box<Ty>,
 }
 
 impl Parse for ReturnTy {

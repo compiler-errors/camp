@@ -1,95 +1,160 @@
+use camp_ast::{
+    foreach_delimiter, foreach_identifier, foreach_literal, foreach_symbol, tok::*, CampResult,
+    Span,
+};
 use camp_lex::tok as lex;
 
-use crate::parser::{Parse, ParseBuffer, Peek};
-use crate::{CampResult, Span};
+use crate::{Parse, ParseBuffer, Peek};
 
-crate::declare_identifiers! {
-    "pub" => Pub,
-    "mod" => Mod,
-    "extern" => Extern,
-    "site" => Site,
-    "super" => Super,
-    "use" => Use,
-    "struct" => Struct,
-    "enum" => Enum,
-    "fn" => Fn,
-    "where" => Where,
-    "as" => As,
-    "mut" => Mut,
-    "dyn" => Dyn,
-    "type" => Type,
-    "impl" => Impl,
-    "for" => For,
-    "trait" => Trait,
-    "let" => Let,
-    "in" => In,
-    "while" => While,
-    "loop" => Loop,
-    "match" => Match,
-    "if" => If,
-    "else" => Else,
-    "break" => Break,
-    "continue" => Continue,
-    "return" => Return,
-    "_" => Underscore,
-    "Fn" => CFn,
-    "FnMut" => CFnMut,
-    "FnOnce" => CFnOnce,
-    "Self" => CSelf,
-    "self" => LSelf,
-    _ => Ident,
+macro_rules! declare_identifiers {
+    ($($keyword:literal => $name:ident,)+ _ => $identifier_name:ident $(,)?) => {
+        $(
+            impl Parse for $name {
+                type Context = ();
+
+                fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
+                    util::parse_keyword::<$name>(input)
+                }
+            }
+
+            impl Peek for $name {
+                fn peek(input: &ParseBuffer<'_>) -> bool {
+                    util::peek_keyword(input, $keyword)
+                }
+
+                fn name() -> &'static str { concat!("`", $keyword, "`") }
+            }
+        )*
+
+        impl Parse for $identifier_name {
+            type Context = ();
+
+            fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
+                util::parse_ident(input)
+            }
+        }
+
+        impl Peek for $identifier_name {
+            fn peek(input: &ParseBuffer<'_>) -> bool {
+                util::peek_ident(input)
+            }
+
+            fn name() -> &'static str { "identifier" }
+        }
+
+        /// Returns true if the string is a keyword, otherwise false.
+        ///
+        /// NOTE: Does not check if the token is a valid identifier.
+        pub fn is_keyword(ident: &str) -> bool {
+            matches!(ident, $($keyword)|*)
+        }
+    };
 }
 
-crate::declare_symbols! {
-    "..." => DotDotDot,
-    "..=" => DotDotEq,
-    "::" => ColonColon,
-    ".." => DotDot,
-    "->" => Arrow,
-    "=>" => BigArrow,
-    "||" => PipePipe,
-    "&&" => AmpAmp,
-    "!=" => BangEq,
-    "==" => EqEq,
-    "<=" => LtEq,
-    ">=" => GtEq,
-    "+" => Plus,
-    ":" => Colon,
-    ";" => Semicolon,
-    "<" => Lt,
-    ">" => Gt,
-    "," => Comma,
-    "&" => Amp,
-    "*" => Star,
-    "!" => Bang,
-    "=" => Eq,
-    "|" => Pipe,
-    "." => Dot,
-    "-" => Minus,
-    "/" => Slash,
-    "%" => Percent,
-    "#" => Hash,
-}
+macro_rules! declare_symbols {
+    ($($symbol:literal => $name:ident),+ $(,)?) => {
+        $(
+            impl Parse for $name {
+                type Context = ();
 
-crate::delimiter_toks!(Paren, LParen, "(", RParen, ")");
-crate::delimiter_toks!(Curly, LCurly, "{", RCurly, "}");
-crate::delimiter_toks!(Sq, LSq, "[", RSq, "]");
+                fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
+                    util::parse_symbol(input, $symbol)
+                }
+            }
 
-crate::literal_tok!(Number, "number");
-crate::literal_tok!(Lifetime, "lifetime");
-crate::literal_tok!(StringLit, "string");
+            impl Peek for $name {
+                fn peek(input: &ParseBuffer<'_>) -> bool {
+                    util::peek_symbol(input, $symbol)
+                }
 
-impl Number {
-    pub fn expect_usize(&self) -> CampResult<usize> {
-        todo!()
+                fn name() -> &'static str { concat!("`", $symbol, "`" )}
+            }
+        )*
     }
 }
 
-impl StringLit {
-    pub fn remove_quotes(&self) -> &str {
-        self.value.strip_prefix('"').unwrap().strip_suffix('"').unwrap()
+macro_rules! declare_delimiters {
+    ($($kind:ident, $LTy:ident, $left:expr, $RTy:ident, $right:expr);+ $(;)?) => {
+        $(
+            impl Peek for $LTy {
+                fn peek(input: &ParseBuffer<'_>) -> bool {
+                    matches!(
+                        input.peek_tok(),
+                        Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
+                            span: _,
+                            delimiter: lex::TokenDelim::$kind
+                        }))
+                    )
+                }
+
+                fn name() -> &'static str {
+                    $left
+                }
+            }
+
+            impl Peek for $RTy {
+                fn peek(input: &ParseBuffer<'_>) -> bool {
+                    matches!(
+                        input.peek_tok(),
+                        Some(lex::Token::EndDelim(lex::TokenEndDelim {
+                            span: _,
+                            delimiter: lex::TokenDelim::$kind
+                        }))
+                    )
+                }
+
+                fn name() -> &'static str {
+                    $right
+                }
+            }
+        )*
     }
 }
+
+macro_rules! declare_literals {
+    ($($Ty:ident, $kind:literal);+ $(;)?) => {
+        $(
+            impl Parse for $Ty {
+                type Context = ();
+
+                fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
+                    if input.peek::<$Ty>() {
+                        match input.bump_tok() {
+                            Some(lex::Token::Literal(lex::TokenLiteral {
+                                span,
+                                literal: lex::TokenLiteralKind::$Ty(ident),
+                            })) => Ok($Ty { value: ident.clone(), span: *span }),
+                            _ => unreachable!(),
+                        }
+                    } else {
+                        input.error_exhausted()?;
+                    }
+                }
+            }
+
+            impl Peek for $Ty {
+                fn peek(input: &ParseBuffer<'_>) -> bool {
+                    matches!(
+                        input.peek_tok(),
+                        Some(lex::Token::Literal(lex::TokenLiteral {
+                            span: _,
+                            literal: lex::TokenLiteralKind::$Ty(_)
+                        }))
+                    )
+                }
+
+                fn name() -> &'static str {
+                    $kind
+                }
+            }
+        )*
+    }
+}
+
+foreach_identifier!(declare_identifiers);
+foreach_symbol!(declare_symbols);
+foreach_delimiter!(declare_delimiters);
+foreach_literal!(declare_literals);
 
 /// Implementation for the declarative macros above
 

@@ -2,8 +2,8 @@ use camp_util::wrapper_id_type;
 use derivative::Derivative;
 
 use crate::{
-    tok, Attribute, Expr, GenericsDecl, ItemId, Pat, ReferencePrefix, Ty,
-    Visibility, WhereClause, punctuated::Punctuated,
+    punctuated::Punctuated, tok, Attribute, Expr, GenericsDecl, ItemId, Pat, ReferencePrefix, Ty,
+    Visibility, WhereClause,
 };
 
 wrapper_id_type!(pub FunctionId => ItemId);

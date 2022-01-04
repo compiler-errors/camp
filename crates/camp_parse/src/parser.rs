@@ -1,16 +1,16 @@
-mod punctuated;
-#[macro_use]
-mod tok_macros;
-
 use std::sync::Arc;
 
+use camp_ast::foreach_delimiter;
+use camp_ast::punctuated::Punctuated;
+use camp_ast::{
+    tok::{LCurly, LParen, LSq, RCurly, RParen, RSq},
+    Span,
+};
 use camp_lex::tok::{self as lex, Token as LexToken};
 use camp_lex::LexBuffer;
 use camp_util::bail;
-pub use punctuated::Punctuated;
 
-use crate::tok::{LCurly, LParen, LSq, RCurly, RParen, RSq};
-use crate::{CampResult, ParseDb, ParseError, Span};
+use crate::{CampResult, ParseDb, ParseError};
 
 #[derive(Clone)]
 pub struct ParseBuffer<'p> {
@@ -20,12 +20,60 @@ pub struct ParseBuffer<'p> {
     last_span: Span,
 }
 
+macro_rules! between_fns {
+    ($($kind:ident, $LTy:ident, $left:expr, $RTy:ident, $right:expr);+ $(;)?) => {$(
+        paste::paste! {
+            pub fn [<parse_between_ $kind:lower s>](&mut self) -> CampResult<($LTy, ParseBuffer<'p>, $RTy)> {
+                let left_tok = if let Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
+                    delimiter: lex::TokenDelim::$kind,
+                    span,
+                })) = self.peek_tok()
+                {
+                    self.bump_tok().expect("Expected a token because it was peeked");
+                    $LTy { span: *span }
+                } else {
+                    self.also_expect::<$LTy>();
+                    self.error_exhausted()?;
+                };
+
+                let tokens = self.tokens;
+                let mut scanned = 0;
+                let mut count = 0;
+
+                loop {
+                    match self.bump_tok() {
+                        Some(lex::Token::EndDelim(lex::TokenEndDelim {
+                            delimiter: lex::TokenDelim::$kind,
+                            span,
+                        })) => {
+                            if count == 0 {
+                                let right_tok = $RTy { span: *span };
+                                let contents =
+                                    ParseBuffer::new_from_parts(self.db, &tokens[0..scanned], *span);
+                                return Ok((left_tok, contents, right_tok));
+                            } else {
+                                count -= 1;
+                            }
+                        }
+                        Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
+                            delimiter: lex::TokenDelim::$kind,
+                            span: _,
+                        })) => {
+                            count += 1;
+                        }
+                        Some(_) => { /* Do nothing */ }
+                        None => unreachable!(),
+                    }
+
+                    scanned += 1;
+                }
+            }
+        }
+    )*};
+}
+
 impl<'p> ParseBuffer<'p> {
-    crate::generate_between_fn!(parse_between_curlys, Curly, LCurly, RCurly);
-
-    crate::generate_between_fn!(parse_between_sqs, Sq, LSq, RSq);
-
-    crate::generate_between_fn!(parse_between_parens, Paren, LParen, RParen);
+    foreach_delimiter!(between_fns);
 
     pub fn new(db: &'p dyn ParseDb, buf: &'p LexBuffer) -> ParseBuffer<'p> {
         ParseBuffer {

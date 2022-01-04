@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 use std::iter::Peekable;
 use std::sync::Arc;
 
-use camp_parse::{
-    CampResult, CampsiteId, EnumId, ModDecl, ModId, ModuleItem as AstItem, Path, PathSegment, Span,
-    Star, Use as AstUse,
+use camp_ast::{
+    tok::Star, CampResult, CampsiteId, EnumId, ModDecl, ModId, ModuleItem as AstItem, Path,
+    PathSegment, Span, Use as AstUse,
 };
 use camp_util::bail;
 use maplit::btreemap;
