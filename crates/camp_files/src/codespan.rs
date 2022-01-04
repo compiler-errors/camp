@@ -17,16 +17,11 @@ pub fn line_start(db: &dyn FilesDb, id: FileId, idx: usize) -> CampResult<usize>
 
     let line_starts = db.line_starts(id)?;
     match idx.cmp(&line_starts.len()) {
-        Ordering::Less => Ok(line_starts
-            .get(idx)
-            .cloned()
-            .expect("failed despite previous check")),
+        Ordering::Less => Ok(line_starts.get(idx).cloned().expect("failed despite previous check")),
         Ordering::Equal => Ok(db.open_file(id)?.len()),
-        Ordering::Greater => Err(FileError::LineTooLarge {
-            given: idx,
-            max: line_starts.len() - 1,
+        Ordering::Greater => {
+            Err(FileError::LineTooLarge { given: idx, max: line_starts.len() - 1 }.into())
         }
-        .into()),
     }
 }
 
@@ -44,11 +39,7 @@ impl<'f> codespan_reporting::files::Files<'f> for dyn FilesDb + '_ {
     }
 
     fn line_index(&'f self, id: Self::FileId, byte_index: usize) -> Result<usize, CodespanError> {
-        match self
-            .line_starts(id)
-            .map_err(|e| into_codespan_error(e))?
-            .binary_search(&byte_index)
-        {
+        match self.line_starts(id).map_err(|e| into_codespan_error(e))?.binary_search(&byte_index) {
             Ok(line) => Ok(line),
             Err(next_line) => Ok(next_line - 1),
         }
@@ -59,12 +50,9 @@ impl<'f> codespan_reporting::files::Files<'f> for dyn FilesDb + '_ {
         id: Self::FileId,
         line_index: usize,
     ) -> Result<std::ops::Range<usize>, CodespanError> {
-        let line_start = self
-            .line_start(id, line_index)
-            .map_err(|e| into_codespan_error(e))?;
-        let next_line_start = self
-            .line_start(id, line_index + 1)
-            .map_err(|e| into_codespan_error(e))?;
+        let line_start = self.line_start(id, line_index).map_err(|e| into_codespan_error(e))?;
+        let next_line_start =
+            self.line_start(id, line_index + 1).map_err(|e| into_codespan_error(e))?;
 
         Ok(line_start..next_line_start)
     }
@@ -72,10 +60,9 @@ impl<'f> codespan_reporting::files::Files<'f> for dyn FilesDb + '_ {
 
 pub fn into_codespan_error(e: CampError) -> CodespanError {
     match e.downcast_ref::<FileError>() {
-        Some(FileError::LineTooLarge { given, max }) => CodespanError::LineTooLarge {
-            given: *given,
-            max: *max,
-        },
+        Some(FileError::LineTooLarge { given, max }) => {
+            CodespanError::LineTooLarge { given: *given, max: *max }
+        }
         Some(FileError::Io(kind, msg)) => CodespanError::Io(IoError::new(*kind, msg.clone())),
         _ => CodespanError::Io(std::io::Error::new(IoErrorKind::Other, format!("{:?}", e))),
     }

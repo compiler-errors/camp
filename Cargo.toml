@@ -13,6 +13,7 @@ members = [
     "crates/camp_parse",
     "crates/camp_import_resolve",
     "crates/camp_hir",
+    "crates/camp_ast",
 ]
 
 [dependencies]

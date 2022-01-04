@@ -41,12 +41,7 @@ impl<'p> ParseBuffer<'p> {
         tokens: &'p [LexToken],
         last_span: Span,
     ) -> ParseBuffer<'p> {
-        ParseBuffer {
-            db,
-            tokens,
-            expected: vec![],
-            last_span,
-        }
+        ParseBuffer { db, tokens, expected: vec![], last_span }
     }
 
     pub fn peek_tok(&self) -> Option<&'p LexToken> {
@@ -211,11 +206,7 @@ impl<T: ShouldParse> Parse for Option<T> {
     type Context = T::Context;
 
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: Self::Context) -> CampResult<Self> {
-        if T::should_parse(input) {
-            Ok(Some(T::parse_with(input, ctx)?))
-        } else {
-            Ok(None)
-        }
+        if T::should_parse(input) { Ok(Some(T::parse_with(input, ctx)?)) } else { Ok(None) }
     }
 }
 

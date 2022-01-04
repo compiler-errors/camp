@@ -1,11 +1,11 @@
 use camino::Utf8PathBuf;
-use camp_files::{FileError, FileId, Span};
+use camp_files::{FileId, Span};
 use camp_util::IntoCampError;
 use codespan_derive::IntoDiagnostic;
 
 #[derive(IntoDiagnostic, Debug, PartialEq, Eq, Clone)]
 #[file_id(FileId)]
-pub enum ParseError {
+pub(crate) enum ParseError {
     #[message = "Expected {1}"]
     ExpectedTokens(#[primary] Span, String),
     #[message = "Visiblity attribute not expected here"]
@@ -28,8 +28,6 @@ pub enum ParseError {
     #[message = "Let statement is not allowed in expression position"]
     DisallowLet(#[primary] Span),
 
-    #[render(FileError::into_diagnostic)]
-    FileError(FileError),
     #[message = "Path does not exist or is not a directory: {0}"]
     NotDirectory(Utf8PathBuf),
     #[message = "Module {mod_name} is defined by two different files"]

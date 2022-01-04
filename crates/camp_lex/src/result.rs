@@ -4,11 +4,9 @@ use codespan_derive::IntoDiagnostic;
 
 use crate::tok::TokenDelim;
 
-pub type CampResult<T> = std::result::Result<T, LexError>;
-
 #[derive(IntoDiagnostic, Debug, PartialEq, Eq, Clone)]
 #[file_id(FileId)]
-pub enum LexError {
+pub(crate) enum LexError {
     #[message = "Unexpected {1}"]
     UnexpectedDelimiter(#[primary] Span, TokenDelim),
     #[message = "Unmatched {1}"]

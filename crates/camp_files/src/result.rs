@@ -8,7 +8,7 @@ use crate::FileId;
 
 #[derive(IntoDiagnostic, Debug, PartialEq, Eq, Clone)]
 #[file_id(FileId)]
-pub enum FileError {
+pub(crate) enum FileError {
     #[message = "IO Error: {1}"]
     Io(IoErrorKind, String),
     #[message = "Path is not UTF-8: {0}"]
@@ -25,11 +25,7 @@ pub enum FileError {
     #[message = "Duplicate campsite name provided in arguments"]
     #[note = "First campsite is at {path1}"]
     #[note = "Second campsite is at {path2}"]
-    DuplicateCampsite {
-        name: String,
-        path1: Utf8PathBuf,
-        path2: Utf8PathBuf,
-    },
+    DuplicateCampsite { name: String, path1: Utf8PathBuf, path2: Utf8PathBuf },
 }
 
 impl IntoCampError for FileError {

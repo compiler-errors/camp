@@ -175,10 +175,7 @@ macro_rules! literal_tok {
                         Some(lex::Token::Literal(lex::TokenLiteral {
                             span,
                             literal: lex::TokenLiteralKind::$Ty(ident),
-                        })) => Ok($Ty {
-                            value: ident.clone(),
-                            span: *span,
-                        }),
+                        })) => Ok($Ty { value: ident.clone(), span: *span }),
                         _ => unreachable!(),
                     }
                 } else {
@@ -214,8 +211,7 @@ macro_rules! generate_between_fn {
                 span,
             })) = self.peek_tok()
             {
-                self.bump_tok()
-                    .expect("Expected a token because it was peeked");
+                self.bump_tok().expect("Expected a token because it was peeked");
                 $L { span: *span }
             } else {
                 self.also_expect::<$L>();
@@ -231,7 +227,7 @@ macro_rules! generate_between_fn {
                     Some(lex::Token::EndDelim(lex::TokenEndDelim {
                         delimiter: lex::TokenDelim::$kind,
                         span,
-                    })) =>
+                    })) => {
                         if count == 0 {
                             let right_tok = $R { span: *span };
                             let contents =
@@ -239,14 +235,15 @@ macro_rules! generate_between_fn {
                             return Ok((left_tok, contents, right_tok));
                         } else {
                             count -= 1;
-                        },
+                        }
+                    }
                     Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
                         delimiter: lex::TokenDelim::$kind,
                         span: _,
                     })) => {
                         count += 1;
-                    },
-                    Some(_) => { /* Do nothing */ },
+                    }
+                    Some(_) => { /* Do nothing */ }
                     None => unreachable!(),
                 }
 

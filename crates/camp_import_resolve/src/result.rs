@@ -8,7 +8,7 @@ pub type UnspannedResolveResult<T> = std::result::Result<T, UnspannedResolveErro
 
 #[derive(IntoDiagnostic, Debug, Eq, PartialEq, Clone)]
 #[file_id(FileId)]
-pub enum ResolveError {
+pub(crate) enum ResolveError {
     #[message = "No such campsite `{module}`"]
     #[note = "Did you forget a `--lib {module}=/path/to/site/mod.camp` flag?"]
     MissingCampsite {
@@ -20,7 +20,7 @@ pub enum ResolveError {
     #[message = "An `extern::` path must be followed by a campsite name"]
     ExternNeedsCampsite(#[primary] Span),
 
-    #[message = "Unrecognized path segment, expected identifier"]
+    #[message = "Invalid path segment, expected identifier"]
     UnrecognizedPathSegment(#[primary] Span),
 
     #[message = "A glob `::*` must be at the end of a path"]
@@ -84,6 +84,14 @@ pub enum ResolveError {
         #[primary]
         span: Span,
     },
+
+    #[message = "Expected `{expected}`, found `{found}`"]
+    ExpectedFound {
+        #[primary]
+        span: Span,
+        expected: &'static str,
+        found: &'static str,
+    },
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -120,8 +128,9 @@ impl UnspannedResolveError {
                 span,
             }
             .into(),
-            UnspannedResolveError::Missing { name, module } =>
-                ResolveError::Missing { name, module, span }.into(),
+            UnspannedResolveError::Missing { name, module } => {
+                ResolveError::Missing { name, module, span }.into()
+            }
             UnspannedResolveError::Other(o) => o,
         }
     }

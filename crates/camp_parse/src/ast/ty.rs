@@ -3,7 +3,7 @@ use std::sync::Arc;
 use derivative::Derivative;
 
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, CampResult, Mutability, ReturnTy, Span};
+use crate::{tok, CampResult, Mutability, Path, ReturnTy, Span};
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]
@@ -25,7 +25,7 @@ pub enum Ty {
     #[derivative(Debug = "transparent")]
     Never(TyNever),
     #[derivative(Debug = "transparent")]
-    Path(TyPath),
+    Path(Path),
     #[derivative(Debug = "transparent")]
     Fn(TyFn),
     #[derivative(Debug = "transparent")]
@@ -50,8 +50,6 @@ impl Ty {
             Ty::Infer(input.parse()?)
         } else if input.peek::<tok::Bang>() {
             Ty::Never(input.parse()?)
-        } else if input.peek::<tok::Ident>() {
-            Ty::Path(input.parse()?)
         } else if input.peek::<tok::Fn>() {
             Ty::Fn(input.parse()?)
         } else if input.peek::<tok::Dyn>() {
@@ -59,7 +57,7 @@ impl Ty {
         } else if input.peek::<tok::CSelf>() {
             Ty::SelfTy(input.parse()?)
         } else {
-            input.error_exhausted()?;
+            Ty::Path(input.parse()?)
         })
     }
 
@@ -73,14 +71,7 @@ impl Ty {
             Ty::Reference(t) => t.prefix.amp_tok.span.until(t.ty.span()),
             Ty::Infer(t) => t.underscore_tok.span,
             Ty::Never(t) => t.bang_tok.span,
-            Ty::Path(t) => {
-                let span = t.path.first().expect("At least one path segment").span;
-                if let Some(g) = &t.generics {
-                    span.until(g.gt_tok.span)
-                } else {
-                    span.until(t.path.last().expect("At least one path segment").span)
-                }
-            },
+            Ty::Path(t) => t.span(),
             Ty::Fn(t) => {
                 let span = t.fn_tok.span;
                 if let Some(r) = &t.return_ty {
@@ -88,11 +79,10 @@ impl Ty {
                 } else {
                     span.until(t.rparen_tok.span)
                 }
-            },
-            Ty::Dyn(t) => t
-                .dyn_tok
-                .span
-                .until(t.supertraits.last().expect("At least one trait ty").span()),
+            }
+            Ty::Dyn(t) => {
+                t.dyn_tok.span.until(t.supertraits.last().expect("At least one trait ty").span())
+            }
             Ty::SelfTy(t) => t.span,
         }
     }
@@ -122,11 +112,7 @@ impl Parse for Ty {
             let colon_colon_tok = input.parse()?;
             let ident = input.parse()?;
 
-            ty = Ty::Assoc(TyAssoc {
-                ty: Arc::new(ty),
-                colon_colon_tok,
-                ident,
-            });
+            ty = Ty::Assoc(TyAssoc { ty: Arc::new(ty), colon_colon_tok, ident });
         }
 
         Ok(ty)
@@ -164,10 +150,7 @@ impl Parse for AsTrait {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(AsTrait {
-            as_tok: input.parse()?,
-            trait_ty: input.parse()?,
-        })
+        Ok(AsTrait { as_tok: input.parse()?, trait_ty: input.parse()? })
     }
 }
 
@@ -197,11 +180,7 @@ impl Parse for TyGroup {
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
-        Ok(TyGroup {
-            lparen_tok,
-            tys: contents.parse_punctuated(rparen_tok)?,
-            rparen_tok,
-        })
+        Ok(TyGroup { lparen_tok, tys: contents.parse_punctuated(rparen_tok)?, rparen_tok })
     }
 }
 
@@ -218,12 +197,7 @@ impl Parse for TyArray {
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let (lsq_tok, mut contents, rsq_tok) = input.parse_between_sqs()?;
-        let arr = TyArray {
-            lsq_tok,
-            ty: contents.parse()?,
-            size: contents.parse()?,
-            rsq_tok,
-        };
+        let arr = TyArray { lsq_tok, ty: contents.parse()?, size: contents.parse()?, rsq_tok };
 
         contents.expect_empty(rsq_tok)?;
         Ok(arr)
@@ -240,10 +214,7 @@ impl Parse for ArraySize {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(ArraySize {
-            semicolon_tok: input.parse()?,
-            size: input.parse()?,
-        })
+        Ok(ArraySize { semicolon_tok: input.parse()?, size: input.parse()? })
     }
 }
 
@@ -264,11 +235,7 @@ impl Parse for TyPointer {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(TyPointer {
-            star_tok: input.parse()?,
-            mutability: input.parse()?,
-            ty: input.parse()?,
-        })
+        Ok(TyPointer { star_tok: input.parse()?, mutability: input.parse()?, ty: input.parse()? })
     }
 }
 
@@ -282,10 +249,7 @@ impl Parse for TyReference {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(TyReference {
-            prefix: input.parse()?,
-            ty: input.parse()?,
-        })
+        Ok(TyReference { prefix: input.parse()?, ty: input.parse()? })
     }
 }
 
@@ -317,9 +281,7 @@ impl Parse for TyInfer {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(TyInfer {
-            underscore_tok: input.parse()?,
-        })
+        Ok(TyInfer { underscore_tok: input.parse()? })
     }
 }
 
@@ -332,46 +294,7 @@ impl Parse for TyNever {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(TyNever {
-            bang_tok: input.parse()?,
-        })
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct TyPath {
-    pub path: Punctuated<tok::Ident, tok::ColonColon>,
-    pub generics: Option<Generics>,
-}
-
-impl Parse for TyPath {
-    type Context = ();
-
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        let mut path = Punctuated::new();
-
-        loop {
-            path.push(input.parse()?);
-
-            if input.peek::<tok::ColonColon>() {
-                path.push_punct(input.parse()?);
-            }
-
-            if !input.peek::<tok::Ident>() {
-                break;
-            }
-        }
-
-        // If there is trailing ::, then we expect generics (turbofish).
-        // Otherwise, optionally parse them.
-        let generics = if path.trailing() {
-            path.pop_punct();
-            Some(input.parse()?)
-        } else {
-            input.parse()?
-        };
-
-        Ok(TyPath { path, generics })
+        Ok(TyNever { bang_tok: input.parse()? })
     }
 }
 
@@ -380,6 +303,12 @@ pub struct Generics {
     pub lt_tok: tok::Lt,
     pub generics: Punctuated<Generic, tok::Comma>,
     pub gt_tok: tok::Gt,
+}
+
+impl Generics {
+    pub fn span(&self) -> Span {
+        self.lt_tok.span.until(self.gt_tok.span)
+    }
 }
 
 impl Parse for Generics {
@@ -403,11 +332,7 @@ impl Parse for Generics {
             generics.push_punct(input.parse()?);
         }
 
-        Ok(Generics {
-            lt_tok,
-            generics,
-            gt_tok: input.parse()?,
-        })
+        Ok(Generics { lt_tok, generics, gt_tok: input.parse()? })
     }
 }
 
@@ -421,6 +346,7 @@ impl ShouldParse for Generics {
 pub enum Generic {
     Lifetime(tok::Lifetime),
     Ty(Ty),
+    Binding(Binding),
 }
 
 impl Parse for Generic {
@@ -429,6 +355,8 @@ impl Parse for Generic {
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         if input.peek::<tok::Lifetime>() {
             Ok(Generic::Lifetime(input.parse()?))
+        } else if input.peek::<tok::Ident>() && input.peek2::<tok::Eq>() {
+            Ok(Generic::Binding(input.parse()?))
         } else {
             Ok(Generic::Ty(input.parse()?))
         }
@@ -482,10 +410,7 @@ impl Parse for TyDyn {
             supertraits = Supertraits::parse_supertrait_list(input)?;
         }
 
-        Ok(TyDyn {
-            dyn_tok,
-            supertraits,
-        })
+        Ok(TyDyn { dyn_tok, supertraits })
     }
 }
 
@@ -493,7 +418,7 @@ impl Parse for TyDyn {
 #[derivative(Debug)]
 pub enum TraitTy {
     #[derivative(Debug = "transparent")]
-    Path(TraitTyPath),
+    Path(Path),
     #[derivative(Debug = "transparent")]
     Fn(TraitTyFn),
 }
@@ -501,14 +426,7 @@ pub enum TraitTy {
 impl TraitTy {
     pub fn span(&self) -> Span {
         match self {
-            TraitTy::Path(t) => {
-                let span = t.path.first().expect("At least one path segment").span;
-                if let Some(g) = &t.generics {
-                    span.until(g.gt_tok.span)
-                } else {
-                    span.until(t.path.last().expect("At least one path segment").span)
-                }
-            },
+            TraitTy::Path(t) => t.span(),
             TraitTy::Fn(t) => {
                 let span = t.fn_kind.span();
                 if let Some(r) = &t.return_ty {
@@ -516,7 +434,7 @@ impl TraitTy {
                 } else {
                     span.until(t.rparen_tok.span)
                 }
-            },
+            }
         }
     }
 }
@@ -534,123 +452,6 @@ impl Parse for TraitTy {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct TraitTyPath {
-    pub path: Punctuated<tok::Ident, tok::ColonColon>,
-    pub generics: Option<TraitGenerics>,
-}
-
-impl Parse for TraitTyPath {
-    type Context = ();
-
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        let mut path = Punctuated::new();
-
-        loop {
-            path.push(input.parse()?);
-
-            if input.peek::<tok::ColonColon>() {
-                path.push_punct(input.parse()?);
-            }
-
-            if !input.peek::<tok::Ident>() {
-                break;
-            }
-        }
-
-        // If there is trailing ::, then we expect generics (turbofish).
-        // Otherwise, optionally parse them.
-        let generics = if path.trailing() {
-            path.pop_punct();
-            Some(input.parse()?)
-        } else {
-            input.parse()?
-        };
-
-        Ok(TraitTyPath { path, generics })
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct TraitGenerics {
-    pub lt_tok: tok::Lt,
-    pub generics: Punctuated<TraitGeneric, tok::Comma>,
-    pub gt_tok: tok::Gt,
-}
-
-impl Parse for TraitGenerics {
-    type Context = ();
-
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        let lt_tok = input.parse()?;
-        let mut generics = Punctuated::new();
-
-        loop {
-            if input.peek::<tok::Gt>() {
-                break;
-            }
-
-            generics.push(input.parse()?);
-
-            if input.peek::<tok::Gt>() {
-                break;
-            }
-
-            generics.push_punct(input.parse()?);
-        }
-
-        Ok(TraitGenerics {
-            lt_tok,
-            generics,
-            gt_tok: input.parse()?,
-        })
-    }
-}
-
-impl ShouldParse for TraitGenerics {
-    fn should_parse(input: &mut ParseBuffer<'_>) -> bool {
-        input.peek::<tok::Lt>()
-    }
-}
-
-impl From<Generics> for TraitGenerics {
-    fn from(g: Generics) -> Self {
-        let Generics {
-            lt_tok,
-            generics,
-            gt_tok,
-        } = g;
-        let generics = generics.map(TraitGeneric::from);
-
-        TraitGenerics {
-            lt_tok,
-            generics,
-            gt_tok,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub enum TraitGeneric {
-    Lifetime(tok::Lifetime),
-    Ty(Ty),
-    Binding(Binding),
-}
-
-impl Parse for TraitGeneric {
-    type Context = ();
-
-    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        if input.peek::<tok::Lifetime>() {
-            Ok(TraitGeneric::Lifetime(input.parse()?))
-        } else if input.peek::<tok::Ident>() && input.peek2::<tok::Eq>() {
-            Ok(TraitGeneric::Binding(input.parse()?))
-        } else {
-            Ok(TraitGeneric::Ty(input.parse()?))
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Binding {
     pub ident: tok::Ident,
     pub eq_tok: tok::Eq,
@@ -661,20 +462,7 @@ impl Parse for Binding {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(Binding {
-            ident: input.parse()?,
-            eq_tok: input.parse()?,
-            ty: input.parse()?,
-        })
-    }
-}
-
-impl From<Generic> for TraitGeneric {
-    fn from(g: Generic) -> Self {
-        match g {
-            Generic::Lifetime(lt) => TraitGeneric::Lifetime(lt),
-            Generic::Ty(ty) => TraitGeneric::Ty(ty),
-        }
+        Ok(Binding { ident: input.parse()?, eq_tok: input.parse()?, ty: input.parse()? })
     }
 }
 
@@ -712,7 +500,7 @@ pub enum FnTraitKind {
 }
 
 impl FnTraitKind {
-    fn span(&self) -> Span {
+    pub fn span(&self) -> Span {
         match self {
             FnTraitKind::Fn(t) => t.span,
             FnTraitKind::FnMut(t) => t.span,

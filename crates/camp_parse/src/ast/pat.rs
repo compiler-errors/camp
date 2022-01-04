@@ -2,7 +2,7 @@ use camp_util::bail;
 use derivative::Derivative;
 
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
-use crate::{tok, CampResult, Generics, ParseError};
+use crate::{tok, CampResult, ParseError, Path};
 
 #[derive(Derivative, PartialEq, Eq, Hash)]
 #[derivative(Debug)]
@@ -41,11 +41,7 @@ impl Parse for Pat {
             }
         }
 
-        Ok(if pats.len() == 1 {
-            pats.unwrap_one()
-        } else {
-            Pat::Or(PatOr { pats })
-        })
+        Ok(if pats.len() == 1 { pats.unwrap_one() } else { Pat::Or(PatOr { pats }) })
     }
 }
 
@@ -87,52 +83,24 @@ impl Pat {
             Pat::Group(input.parse()?)
         } else if input.peek::<tok::LCurly>() {
             Pat::Array(input.parse()?)
-        } else if input.peek::<tok::Ident>() || input.peek::<tok::Mut>() {
-            Pat::pat_ident(input)?
         } else {
-            input.error_exhausted()?;
+            Pat::pat_ident(input)?
         })
     }
 
     fn pat_ident(input: &mut ParseBuffer<'_>) -> CampResult<Pat> {
         let mut_tok = input.parse()?;
-        let mut path = Punctuated::new();
-
-        loop {
-            path.push(input.parse()?);
-
-            if input.peek::<tok::ColonColon>() {
-                path.push_punct(input.parse()?);
-            }
-
-            if !input.peek::<tok::Ident>() {
-                break;
-            }
-        }
-
-        // If there is trailing ::, then we expect generics (turbofish).
-        // Otherwise, optionally parse them.
-        let generics = if path.trailing() {
-            path.pop_punct();
-            Some(input.parse()?)
-        } else {
-            input.parse()?
-        };
-
+        let path = input.parse()?;
         let fields = input.parse()?;
 
-        Ok(if generics.is_none() && matches!(fields, PatFields::None) {
+        Ok(if matches!(fields, PatFields::None) {
             Pat::Path(PatPath { mut_tok, path })
         } else {
             if let Some(mut_tok) = mut_tok {
                 bail!(ParseError::UnexpectedMut(mut_tok.span));
             }
 
-            Pat::Struct(PatStruct {
-                path,
-                generics,
-                fields,
-            })
+            Pat::Struct(PatStruct { path, fields })
         })
     }
 }
@@ -140,7 +108,7 @@ impl Pat {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct PatPath {
     mut_tok: Option<tok::Mut>,
-    path: Punctuated<tok::Ident, tok::ColonColon>,
+    path: Path,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -181,18 +149,13 @@ impl Parse for PatGroup {
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let (lparen_tok, contents, rparen_tok) = input.parse_between_parens()?;
 
-        Ok(PatGroup {
-            lparen_tok,
-            tys: contents.parse_punctuated(rparen_tok)?,
-            rparen_tok,
-        })
+        Ok(PatGroup { lparen_tok, tys: contents.parse_punctuated(rparen_tok)?, rparen_tok })
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct PatStruct {
-    path: Punctuated<tok::Ident, tok::ColonColon>,
-    generics: Option<Generics>,
+    path: Path,
     fields: PatFields,
 }
 
@@ -233,11 +196,7 @@ impl Parse for FieldsNamed {
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let (lcurly_tok, contents, rcurly_tok) = input.parse_between_curlys()?;
 
-        Ok(FieldsNamed {
-            lcurly_tok,
-            fields: contents.parse_punctuated(rcurly_tok)?,
-            rcurly_tok,
-        })
+        Ok(FieldsNamed { lcurly_tok, fields: contents.parse_punctuated(rcurly_tok)?, rcurly_tok })
     }
 }
 
@@ -251,10 +210,7 @@ impl Parse for FieldNamed {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(FieldNamed {
-            ident: input.parse()?,
-            pat: input.parse()?,
-        })
+        Ok(FieldNamed { ident: input.parse()?, pat: input.parse()? })
     }
 }
 
@@ -268,10 +224,7 @@ impl Parse for NamedEnding {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(NamedEnding {
-            colon_tok: input.parse()?,
-            pat: input.parse()?,
-        })
+        Ok(NamedEnding { colon_tok: input.parse()?, pat: input.parse()? })
     }
 }
 
@@ -315,10 +268,6 @@ impl Parse for PatArray {
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let (lsq_tok, contents, rsq_tok) = input.parse_between_sqs()?;
 
-        Ok(PatArray {
-            lsq_tok,
-            tys: contents.parse_punctuated(rsq_tok)?,
-            rsq_tok,
-        })
+        Ok(PatArray { lsq_tok, tys: contents.parse_punctuated(rsq_tok)?, rsq_tok })
     }
 }

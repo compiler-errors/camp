@@ -8,10 +8,22 @@ use camp_parse::{CampResult, CampsiteId, EnumId, ModId, ParseDb, Use as AstUse};
 
 use crate::items::{CampsiteItems, Items, UnresolvedUse};
 pub use crate::items::{Item, ItemViz, Visibility};
-pub use crate::result::{ResolveError, UnspannedResolveError, UnspannedResolveResult};
+pub use crate::resolve::lower_first_path_segment;
+pub use crate::result::{UnspannedResolveError, UnspannedResolveResult};
 
 #[salsa::query_group(ResolveStorage)]
 pub trait ResolveDb: ParseDb {
+    // ------------------ "Public" API for lowering paths ------------------ //
+
+    // TODO: Should probably factor this into a call that just takes String when
+    // cached
+    fn item(
+        &self,
+        accessor_module: ModId,
+        accessed_module: ModId,
+        segment: String,
+    ) -> UnspannedResolveResult<Item>;
+
     // ---------------- Used during glob/import resolution ---------------- //
 
     /// Calculate the maximum visibility that an accessor module is permitted to
@@ -29,17 +41,6 @@ pub trait ResolveDb: ParseDb {
 
     #[salsa::invoke(resolve::enum_items)]
     fn enum_items(&self, e: EnumId) -> CampResult<Items>;
-
-    // ------------------ "Public" API for lowering paths ------------------ //
-
-    // TODO: Should probably factor this into a call that just takes String when
-    // cached
-    fn item(
-        &self,
-        accessor_module: ModId,
-        accessed_module: ModId,
-        segment: String,
-    ) -> UnspannedResolveResult<Item>;
 }
 
 fn items(db: &dyn ResolveDb, module: ModId) -> CampResult<Items> {
@@ -54,9 +55,7 @@ fn item(
     accessed_module: ModId,
     segment: String,
 ) -> UnspannedResolveResult<Item> {
-    let items = db
-        .items(accessed_module)
-        .map_err(UnspannedResolveError::Other)?;
+    let items = db.items(accessed_module).map_err(UnspannedResolveError::Other)?;
 
     if let Some(ItemViz { item, viz, span: _ }) = items.get(&segment) {
         let allowed_viz = db.max_visibility_for(accessor_module, accessed_module);
@@ -73,9 +72,6 @@ fn item(
             })
         }
     } else {
-        Err(UnspannedResolveError::Missing {
-            name: segment,
-            module: db.mod_name(accessed_module),
-        })
+        Err(UnspannedResolveError::Missing { name: segment, module: db.mod_name(accessed_module) })
     }
 }

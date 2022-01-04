@@ -55,6 +55,8 @@ pub trait ParseDb: camp_files::FilesDb {
 
     fn item_name(&self, item: ItemId) -> CampResult<String>;
 
+    fn item_kind(&self, item: ItemId) -> CampResult<&'static str>;
+
     fn std_ast(&self) -> CampResult<Arc<Mod>>;
 
     // ----- Internal plumbing ----- //
@@ -123,7 +125,7 @@ fn mod_file(db: &dyn ParseDb, id: ModId) -> CampResult<FileId> {
                     file2: named_file,
                 });
             }
-        },
+        }
     }
 }
 
@@ -131,10 +133,7 @@ fn submod_directory(db: &dyn ParseDb, id: ModId) -> CampResult<Utf8PathBuf> {
     match db.lookup_mod_decl(id) {
         ModDecl::CampsiteRoot(id) => {
             let path = db.campsite_root_file(id);
-            let directory = path
-                .parent()
-                .expect("Canonical files must have a parent")
-                .to_owned();
+            let directory = path.parent().expect("Canonical files must have a parent").to_owned();
 
             debug!("submod directory for {:?} is {}", id, directory);
 
@@ -143,7 +142,7 @@ fn submod_directory(db: &dyn ParseDb, id: ModId) -> CampResult<Utf8PathBuf> {
             } else {
                 bail!(ParseError::NotDirectory(directory));
             }
-        },
+        }
         ModDecl::Submod(decl) => {
             let parent_mod_id = db.lookup_item_decl(decl.id).mod_id;
 
@@ -156,19 +155,20 @@ fn submod_directory(db: &dyn ParseDb, id: ModId) -> CampResult<Utf8PathBuf> {
             } else {
                 bail!(ParseError::NotDirectory(directory));
             }
-        },
+        }
     }
 }
 
 fn mod_ast(db: &dyn ParseDb, id: ModId) -> CampResult<Arc<Mod>> {
     match db.lookup_mod_decl(id) {
         ModDecl::CampsiteRoot(id) => db.campsite_ast(id),
-        ModDecl::Submod(decl) =>
+        ModDecl::Submod(decl) => {
             if let ModuleItem::Mod(ast) = db.item_ast(decl.id)? {
                 Ok(ast)
             } else {
                 unreachable!()
-            },
+            }
+        }
     }
 }
 
@@ -179,43 +179,23 @@ fn item_ast(db: &dyn ParseDb, id: ItemId) -> CampResult<ModuleItem> {
 }
 
 fn struct_ast(db: &dyn ParseDb, id: StructId) -> CampResult<Arc<Struct>> {
-    if let ModuleItem::Struct(ast) = db.item_ast(id.into())? {
-        Ok(ast)
-    } else {
-        unreachable!()
-    }
+    if let ModuleItem::Struct(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
 }
 
 fn enum_ast(db: &dyn ParseDb, id: EnumId) -> CampResult<Arc<Enum>> {
-    if let ModuleItem::Enum(ast) = db.item_ast(id.into())? {
-        Ok(ast)
-    } else {
-        unreachable!()
-    }
+    if let ModuleItem::Enum(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
 }
 
 fn fn_ast(db: &dyn ParseDb, id: FunctionId) -> CampResult<Arc<Function>> {
-    if let ModuleItem::Function(ast) = db.item_ast(id.into())? {
-        Ok(ast)
-    } else {
-        unreachable!()
-    }
+    if let ModuleItem::Function(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
 }
 
 fn trait_ast(db: &dyn ParseDb, id: TraitId) -> CampResult<Arc<Trait>> {
-    if let ModuleItem::Trait(ast) = db.item_ast(id.into())? {
-        Ok(ast)
-    } else {
-        unreachable!()
-    }
+    if let ModuleItem::Trait(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
 }
 
 fn impl_ast(db: &dyn ParseDb, id: ImplId) -> CampResult<Arc<Impl>> {
-    if let ModuleItem::Impl(ast) = db.item_ast(id.into())? {
-        Ok(ast)
-    } else {
-        unreachable!()
-    }
+    if let ModuleItem::Impl(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
 }
 
 fn campsite_of(db: &dyn ParseDb, module: ModId) -> CampsiteId {
@@ -266,9 +246,19 @@ fn item_name(db: &dyn ParseDb, id: ItemId) -> CampResult<String> {
     })
 }
 
+fn item_kind(db: &dyn ParseDb, id: ItemId) -> CampResult<&'static str> {
+    Ok(match db.item_ast(id)? {
+        ModuleItem::Mod(_) => "module",
+        ModuleItem::Extern(_) => "extern",
+        ModuleItem::Use(_) => "use",
+        ModuleItem::Struct(_) => "struct",
+        ModuleItem::Enum(_) => "enum",
+        ModuleItem::Function(_) => "function",
+        ModuleItem::Trait(_) => "trait",
+        ModuleItem::Impl(_) => "impl",
+    })
+}
+
 fn std_ast(db: &dyn ParseDb) -> CampResult<Arc<Mod>> {
-    db.campsite_ast(
-        db.campsite_by_name("std".to_owned())?
-            .ok_or_else(|| ParseError::NoStd)?,
-    )
+    db.campsite_ast(db.campsite_by_name("std".to_owned())?.ok_or_else(|| ParseError::NoStd)?)
 }

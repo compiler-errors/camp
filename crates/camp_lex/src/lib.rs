@@ -1,11 +1,10 @@
 mod result;
 pub mod tok;
 
-use camp_files::{FileId, Span};
+use camp_files::{CampResult, FileId, Span};
 use camp_util::bail;
-use result::CampResult;
 
-pub use crate::result::LexError;
+use crate::result::LexError;
 use crate::tok::*;
 
 pub struct LexBuffer {
@@ -14,13 +13,7 @@ pub struct LexBuffer {
 }
 
 pub fn lex(file_id: FileId, file: &str) -> CampResult<LexBuffer> {
-    Lexer {
-        rest: file,
-        byte_offset: 0,
-        file_id,
-        delimiters: vec![],
-    }
-    .lex()
+    Lexer { rest: file, byte_offset: 0, file_id, delimiters: vec![] }.lex()
 }
 
 struct Lexer<'input> {
@@ -44,11 +37,7 @@ impl Lexer<'_> {
                     _ => self.token(first_char),
                 }?)
             } else if let Some((delim_span, delim)) = self.delimiters.last() {
-                bail!(LexError::ExpectedDelimiter(
-                    *delim_span,
-                    *delim,
-                    self.next_span(),
-                ));
+                bail!(LexError::ExpectedDelimiter(*delim_span, *delim, self.next_span(),));
             } else {
                 return Ok(LexBuffer {
                     tokens,
@@ -149,17 +138,12 @@ impl Lexer<'_> {
 
         match self.delimiters.pop() {
             Some((old_span, old_delimiter)) if old_delimiter != delimiter => {
-                bail!(LexError::MismatchedDelimiter(
-                    old_span,
-                    old_delimiter,
-                    span,
-                    delimiter,
-                ));
-            },
+                bail!(LexError::MismatchedDelimiter(old_span, old_delimiter, span, delimiter,));
+            }
             None => {
                 bail!(LexError::UnexpectedDelimiter(span, delimiter));
-            },
-            _ => { /* Good */ },
+            }
+            _ => { /* Good */ }
         }
 
         Ok(Token::EndDelim(TokenEndDelim { span, delimiter }))
@@ -219,10 +203,7 @@ impl Lexer<'_> {
             }
 
             if number.ends_with('_') {
-                bail!(LexError::InvalidNumericLiteral(
-                    begin_span.until(last_span),
-                    number,
-                ));
+                bail!(LexError::InvalidNumericLiteral(begin_span.until(last_span), number,));
             }
         }
 
@@ -234,15 +215,12 @@ impl Lexer<'_> {
                 Some(c @ '+' | c @ '-') => {
                     number.push(c);
                     last_span = self.bump();
-                },
-                _ => {},
+                }
+                _ => {}
             }
 
             if self.char().is_none() {
-                bail!(LexError::InvalidNumericLiteral(
-                    begin_span.until(last_span),
-                    number,
-                ));
+                bail!(LexError::InvalidNumericLiteral(begin_span.until(last_span), number,));
             }
 
             while let Some(c) = self.char() {
@@ -255,10 +233,7 @@ impl Lexer<'_> {
             }
 
             if number.ends_with('_') {
-                bail!(LexError::InvalidNumericLiteral(
-                    begin_span.until(last_span),
-                    number,
-                ));
+                bail!(LexError::InvalidNumericLiteral(begin_span.until(last_span), number,));
             }
         }
 
@@ -291,7 +266,7 @@ impl Lexer<'_> {
                     literal: TokenLiteralKind::Char(char),
                 }))
             } else {
-                Err(LexError::ExpectedQuote(self.next_span()))
+                bail!(LexError::ExpectedQuote(self.next_span()));
             }
         } else if let Some('\'') = self.char() {
             let last_span = self.bump();
@@ -318,7 +293,7 @@ impl Lexer<'_> {
                 literal: TokenLiteralKind::Lifetime(lifetime),
             }))
         } else {
-            Err(LexError::ExpectedQuote(self.next_span()))
+            bail!(LexError::ExpectedQuote(self.next_span()));
         }
     }
 
@@ -333,15 +308,12 @@ impl Lexer<'_> {
             'n' => {
                 self.bump();
                 Ok('\n')
-            },
+            }
             '\'' | '\"' | '\\' => {
                 self.bump();
                 Ok(char)
-            },
-            _ => Err(LexError::UnexpectedEscape(
-                back_span.until(self.next_span()),
-                char,
-            )),
+            }
+            _ => bail!(LexError::UnexpectedEscape(back_span.until(self.next_span()), char,)),
         }
     }
 
@@ -357,21 +329,21 @@ impl Lexer<'_> {
                 Some('\"') => {
                     last_span = self.bump();
                     break;
-                },
+                }
                 Some('\\') => {
                     let back_span = self.bump();
                     string.push(self.escaped_char(back_span)?);
-                },
+                }
                 Some('\n') => {
                     bail!(LexError::EolInString(begin_span.until(self.next_span())));
-                },
+                }
                 Some(c) => {
                     self.bump();
                     string.push(c);
-                },
+                }
                 None => {
                     bail!(LexError::EofInString(begin_span.until(self.next_span())));
-                },
+                }
             }
         }
 
@@ -399,10 +371,7 @@ impl Lexer<'_> {
             }
         }
 
-        Ok(Token::Ident(TokenIdent {
-            span: begin_span.until(last_span),
-            ident,
-        }))
+        Ok(Token::Ident(TokenIdent { span: begin_span.until(last_span), ident }))
     }
 
     fn punct(&mut self, first_char: char) -> CampResult<Token> {
@@ -411,16 +380,9 @@ impl Lexer<'_> {
             let trailing_whitespace = self.starts_with("/*")
                 || self.starts_with("//")
                 || self.char().map_or(true, |c| !is_punct(c));
-            Ok(Token::Punct(TokenPunct {
-                punct: first_char,
-                span,
-                trailing_whitespace,
-            }))
+            Ok(Token::Punct(TokenPunct { punct: first_char, span, trailing_whitespace }))
         } else {
-            Err(LexError::UnrecognizedCharacter(
-                self.next_span(),
-                first_char,
-            ))
+            bail!(LexError::UnrecognizedCharacter(self.next_span(), first_char,));
         }
     }
 }
@@ -439,12 +401,7 @@ fn is_punct(c: char) -> bool {
 
 #[cfg(test)]
 pub fn test_tokenize(string: &str) -> CampResult<LexBuffer> {
-    let lex = Lexer {
-        rest: string,
-        byte_offset: 0,
-        file_id: FileId::fake(),
-        delimiters: vec![],
-    };
+    let lex = Lexer { rest: string, byte_offset: 0, file_id: FileId::fake(), delimiters: vec![] };
 
     lex.lex()
 }

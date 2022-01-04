@@ -64,6 +64,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "camp_ast"
+version = "0.1.0"
+dependencies = [
+ "camino",
+ "camp_files",
+ "camp_lex",
+ "camp_util",
+ "codespan-derive",
+ "derivative",
+ "salsa",
+]
+
+[[package]]
 name = "camp_driver"
 version = "0.1.0"
 dependencies = [

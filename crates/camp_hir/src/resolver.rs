@@ -1,15 +1,16 @@
 use std::collections::{BTreeMap, HashMap};
-use std::rc::Rc;
+use std::iter::Peekable;
 use std::sync::Arc;
 
 use ast::CampResult;
+use camp_import_resolve::Item;
 use camp_parse as ast;
 use camp_parse::Span;
 use camp_util::bail;
-use maplit::{btreemap, hashmap};
 
 use crate::hir::*;
-use crate::{HirDb, LoweringError, StringId};
+use crate::result::LoweringError;
+use crate::{HirDb, StringId};
 
 pub struct Resolver<T: ResolveContext> {
     pub rcx: T,
@@ -20,7 +21,22 @@ pub trait ResolveContext {
 
     fn fresh_ty_id(&self) -> TyId;
 
-    fn record_ty(&self, ty: Ty) -> Rc<Ty>;
+    fn record_ty(&self, ty: Ty) -> Arc<Ty>;
+
+    fn module(&self, id: &ast::Ident) -> CampResult<Item>;
+
+    fn resolve_first_path_segment<'a, S: Iterator<Item = &'a ast::PathSegment>>(
+        &self,
+        segments: &mut Peekable<S>,
+    ) -> CampResult<PartialRes>;
+
+    fn self_ty_kind(&self) -> CampResult<TyKind>;
+
+     fn fresh_infer_lifetime(&self, span: Span) -> CampResult<Lifetime>;
+
+     fn resolve_lifetime(&self, l: &ast::Lifetime) -> CampResult<Lifetime>;
+
+     fn fresh_infer_ty(&self, span: Span) -> CampResult<Arc<Ty>>;
 }
 
 impl<T: ResolveContext> Resolver<T> {
@@ -32,12 +48,8 @@ impl<T: ResolveContext> Resolver<T> {
         self.rcx.db().string(s.to_owned())
     }
 
-    pub fn fresh_ty_id(&self) -> TyId {
-        self.rcx.fresh_ty_id()
-    }
-
-    pub fn record_ty(&self, ty: Ty) -> Rc<Ty> {
-        self.rcx.record_ty(ty)
+    pub fn lookup_string(&self, s: StringId) -> String {
+        self.rcx.db().lookup_string(s)
     }
 }
 

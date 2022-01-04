@@ -46,11 +46,7 @@ impl Parse for VisibilityRange {
         let kind = contents.parse()?;
         contents.expect_empty(rparen_tok)?;
 
-        Ok(VisibilityRange {
-            lparen_tok,
-            kind,
-            rparen_tok,
-        })
+        Ok(VisibilityRange { lparen_tok, kind, rparen_tok })
     }
 }
 

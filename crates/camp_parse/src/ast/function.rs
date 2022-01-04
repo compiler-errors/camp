@@ -124,11 +124,7 @@ impl Parse for ParameterNamed {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(ParameterNamed {
-            pat: input.parse()?,
-            colon_tok: input.parse()?,
-            ty: input.parse()?,
-        })
+        Ok(ParameterNamed { pat: input.parse()?, colon_tok: input.parse()?, ty: input.parse()? })
     }
 }
 
@@ -142,10 +138,7 @@ impl Parse for ParameterSelf {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(ParameterSelf {
-            mut_tok: input.parse()?,
-            self_tok: input.parse()?,
-        })
+        Ok(ParameterSelf { mut_tok: input.parse()?, self_tok: input.parse()? })
     }
 }
 
@@ -159,10 +152,7 @@ impl Parse for ParameterSelfRef {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(ParameterSelfRef {
-            prefix: input.parse()?,
-            self_tok: input.parse()?,
-        })
+        Ok(ParameterSelfRef { prefix: input.parse()?, self_tok: input.parse()? })
     }
 }
 
@@ -176,10 +166,7 @@ impl Parse for ReturnTy {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(ReturnTy {
-            arrow_tok: input.parse()?,
-            ty: input.parse()?,
-        })
+        Ok(ReturnTy { arrow_tok: input.parse()?, ty: input.parse()? })
     }
 }
 

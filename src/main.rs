@@ -79,11 +79,7 @@ fn main() {
     };
 
     if let Err(err) = output {
-        let color = if args.no_color {
-            ColorChoice::Never
-        } else {
-            ColorChoice::Auto
-        };
+        let color = if args.no_color { ColorChoice::Never } else { ColorChoice::Auto };
         let mut writer = StandardStream::stderr(color);
         let config = codespan_reporting::term::Config::default();
 

@@ -87,11 +87,7 @@ impl Number {
 
 impl StringLit {
     pub fn remove_quotes(&self) -> &str {
-        self.value
-            .strip_prefix('"')
-            .unwrap()
-            .strip_suffix('"')
-            .unwrap()
+        self.value.strip_prefix('"').unwrap().strip_suffix('"').unwrap()
     }
 }
 
@@ -107,10 +103,9 @@ mod util {
     pub fn parse_ident(input: &mut ParseBuffer<'_>) -> CampResult<Ident> {
         if input.peek::<Ident>() {
             match input.bump_tok() {
-                Some(lex::Token::Ident(lex::TokenIdent { span, ident })) => Ok(Ident {
-                    span: *span,
-                    ident: ident.clone(),
-                }),
+                Some(lex::Token::Ident(lex::TokenIdent { span, ident })) => {
+                    Ok(Ident { span: *span, ident: ident.clone() })
+                }
                 _ => unreachable!(),
             }
         } else {
@@ -142,10 +137,10 @@ mod util {
                     trailing_whitespace,
                 })) if *punct == symbol && (!trailing_whitespace || idx == symbols.len() - 1) => {
                     /* Okay */
-                },
+                }
                 _ => {
                     return false;
-                },
+                }
             }
         }
 
@@ -163,7 +158,7 @@ mod util {
                 match input.bump_tok() {
                     Some(lex::Token::Punct(t)) => {
                         symbol_span = symbol_span.until(t.span);
-                    },
+                    }
                     _ => unreachable!(),
                 }
             }

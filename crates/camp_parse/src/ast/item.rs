@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
+pub use camp_lex::tok::Token as RawToken;
 use camp_util::{bail, id_type, wrapper_id_type};
 use derivative::Derivative;
 
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
 use crate::{
-    tok, CampResult, CampsiteId, Expr, ExprContext, ExprLiteral, ExprPath, Function, ParseAttrs,
-    ParseDb, ParseError, PathSegment, Signature, Span, Supertraits, TraitGenerics, TraitTy,
-    TraitTyPath, Ty, TyPath, Visibility,
+    tok, CampResult, CampsiteId, Expr, ExprContext, ExprLiteral, Function, ParseAttrs, ParseDb,
+    ParseError, Path, Signature, Span, Supertraits, TraitTy, Ty, Visibility,
 };
 
 id_type!(pub ModId);
@@ -72,10 +72,7 @@ impl Parse for Mod {
         let mut items = vec![];
 
         while !input.is_empty() {
-            let decl = ItemDecl {
-                mod_id: ctx,
-                idx: items.len(),
-            };
+            let decl = ItemDecl { mod_id: ctx, idx: items.len() };
             let id = input.db.item_decl(decl);
 
             items.push(input.parse_with(id)?);
@@ -176,7 +173,9 @@ impl Attribute {
 
     pub fn name(&self) -> &str {
         match &self.inner {
-            AttributeInner::NameValue { ident, eq_tok, lit } => &ident.ident,
+            AttributeInner::NameValue { ident, .. } | AttributeInner::List { ident, .. } => {
+                &ident.ident
+            }
         }
     }
 
@@ -190,10 +189,7 @@ impl Attribute {
 
     pub fn do_not_expect(input: &mut ParseBuffer<'_>) -> CampResult<()> {
         if let Some(attr) = input.parse::<Option<Attribute>>()? {
-            bail!(ParseError::UnexpectedAttr {
-                name: attr.name().to_owned(),
-                span: attr.span(),
-            });
+            bail!(ParseError::UnexpectedAttr { name: attr.name().to_owned(), span: attr.span() });
         } else {
             Ok(())
         }
@@ -208,12 +204,7 @@ impl Parse for Attribute {
         let (lsq_tok, mut buf, rsq_tok) = input.parse_between_sqs()?;
         let inner = buf.parse()?;
         buf.expect_empty(rsq_tok)?;
-        Ok(Attribute {
-            hash_tok,
-            lsq_tok,
-            inner,
-            rsq_tok,
-        })
+        Ok(Attribute { hash_tok, lsq_tok, inner, rsq_tok })
     }
 }
 
@@ -230,6 +221,12 @@ pub enum AttributeInner {
         ident: tok::Ident,
         eq_tok: tok::Eq,
         lit: ExprLiteral,
+    },
+    List {
+        ident: tok::Ident,
+        lparen_tok: tok::LParen,
+        contents: Vec<RawToken>,
+        rparen_tok: tok::RParen,
     },
 }
 
@@ -287,7 +284,7 @@ pub struct Use {
     pub id: UseId,
     pub viz: Visibility,
     pub use_tok: tok::Use,
-    pub path: Punctuated<PathSegment, tok::ColonColon>,
+    pub path: Path,
     pub rename: Option<UseRename>,
     pub semi_tok: tok::Semicolon,
 }
@@ -298,23 +295,11 @@ impl Parse for Use {
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: UseId) -> CampResult<Self> {
         Attribute::do_not_expect(input)?;
 
-        let viz = input.parse()?;
-        let use_tok = input.parse()?;
-        let mut path = Punctuated::new();
-
-        path.push(input.parse()?);
-
-        while input.peek::<tok::ColonColon>() {
-            path.push_punct(input.parse()?);
-
-            path.push(input.parse()?);
-        }
-
         Ok(Use {
             id: ctx,
-            viz,
-            use_tok,
-            path,
+            viz: input.parse()?,
+            use_tok: input.parse()?,
+            path: input.parse()?,
             rename: input.parse()?,
             semi_tok: input.parse()?,
         })
@@ -323,7 +308,7 @@ impl Parse for Use {
 
 impl Use {
     pub fn span(&self) -> Span {
-        self.use_tok.span.until(self.path.last().unwrap().span())
+        self.use_tok.span.until(self.semi_tok.span)
     }
 }
 
@@ -337,10 +322,7 @@ impl Parse for UseRename {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(UseRename {
-            as_tok: input.parse()?,
-            ident: input.parse()?,
-        })
+        Ok(UseRename { as_tok: input.parse()?, ident: input.parse()? })
     }
 }
 
@@ -384,11 +366,7 @@ impl Parse for GenericsDecl {
             generics.push_punct(input.parse()?);
         }
 
-        Ok(GenericsDecl {
-            lt_tok,
-            generics,
-            gt_tok: input.parse()?,
-        })
+        Ok(GenericsDecl { lt_tok, generics, gt_tok: input.parse()? })
     }
 }
 
@@ -428,10 +406,7 @@ impl Parse for GenericLifetime {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(GenericLifetime {
-            lifetime: input.parse()?,
-            maybe_bounds: input.parse()?,
-        })
+        Ok(GenericLifetime { lifetime: input.parse()?, maybe_bounds: input.parse()? })
     }
 }
 
@@ -445,10 +420,7 @@ impl Parse for GenericType {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(GenericType {
-            ident: input.parse()?,
-            maybe_bounds: input.parse()?,
-        })
+        Ok(GenericType { ident: input.parse()?, maybe_bounds: input.parse()? })
     }
 }
 
@@ -490,7 +462,7 @@ impl Parse for Struct {
                 }
                 // Parse optional trailing where clause and semicolon token
                 (input.parse()?, Some(input.parse()?))
-            },
+            }
         };
 
         Ok(Struct {
@@ -544,11 +516,7 @@ impl Parse for FieldsNamed {
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
         let (lcurly_tok, contents, rcurly_tok) = input.parse_between_curlys()?;
 
-        Ok(FieldsNamed {
-            lcurly_tok,
-            fields: contents.parse_punctuated(rcurly_tok)?,
-            rcurly_tok,
-        })
+        Ok(FieldsNamed { lcurly_tok, fields: contents.parse_punctuated(rcurly_tok)?, rcurly_tok })
     }
 }
 
@@ -604,10 +572,7 @@ impl Parse for FieldPositional {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(FieldPositional {
-            viz: input.parse()?,
-            ty: input.parse()?,
-        })
+        Ok(FieldPositional { viz: input.parse()?, ty: input.parse()? })
     }
 }
 
@@ -638,10 +603,7 @@ impl Parse for WhereClause {
             }
         }
 
-        Ok(WhereClause {
-            where_tok,
-            restrictions,
-        })
+        Ok(WhereClause { where_tok, restrictions })
     }
 }
 
@@ -661,10 +623,7 @@ impl Parse for TypeRestriction {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(TypeRestriction {
-            subject: input.parse()?,
-            trailing_traits: input.parse()?,
-        })
+        Ok(TypeRestriction { subject: input.parse()?, trailing_traits: input.parse()? })
     }
 }
 
@@ -742,10 +701,7 @@ impl Parse for EnumVariant {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(EnumVariant {
-            ident: input.parse()?,
-            fields: input.parse()?,
-        })
+        Ok(EnumVariant { ident: input.parse()?, fields: input.parse()? })
     }
 }
 
@@ -784,10 +740,7 @@ impl Parse for Trait {
         let mut trait_items = vec![];
 
         while !contents.is_empty() {
-            let decl = TraitItemDecl {
-                trait_id: ctx,
-                idx: trait_items.len(),
-            };
+            let decl = TraitItemDecl { trait_id: ctx, idx: trait_items.len() };
             let id = input.db.trait_decl(decl);
 
             trait_items.push(contents.parse_with(id)?);
@@ -928,16 +881,10 @@ impl Parse for Impl {
 
         if let Some(for_tok) = input.parse()? {
             match ty_or_trait {
-                Ty::Path(TyPath { path, generics }) => {
-                    impl_trait = Some(ImplTrait {
-                        trait_ty: TraitTy::Path(TraitTyPath {
-                            path,
-                            generics: generics.map(TraitGenerics::from),
-                        }),
-                        for_tok,
-                    });
+                Ty::Path(path) => {
+                    impl_trait = Some(ImplTrait { trait_ty: TraitTy::Path(path), for_tok });
                     ty = input.parse()?;
-                },
+                }
                 ty => bail!(ParseError::NotATrait(ty.span())),
             }
         } else {
@@ -949,10 +896,7 @@ impl Parse for Impl {
         let mut impl_items = vec![];
 
         while !contents.is_empty() {
-            let decl = ImplItemDecl {
-                impl_id: ctx,
-                idx: impl_items.len(),
-            };
+            let decl = ImplItemDecl { impl_id: ctx, idx: impl_items.len() };
             let id = input.db.impl_decl(decl);
 
             impl_items.push(contents.parse_with(id)?);

@@ -68,10 +68,7 @@ pub fn get_ui_test_files(dir_name: &str) -> Result<Vec<UITest>> {
     let dir_path = Utf8PathBuf::from(format!("../../ui_test/{}/", dir_name));
     let dir_path: Utf8PathBuf = dir_path
         .canonicalize()
-        .expect(&format!(
-            "Expected to be able to canonicalize path: {}",
-            dir_path
-        ))
+        .expect(&format!("Expected to be able to canonicalize path: {}", dir_path))
         .try_into()
         .expect("Expected canonicalized path to be utf-8");
     assert!(dir_path.is_dir(), "Expected {} to be a directory", dir_path);
@@ -130,11 +127,7 @@ pub fn compare_test_data(
     stdout: String,
     stderr: String,
 ) -> Result<bool> {
-    let dirname = test
-        .path
-        .parent()
-        .expect("Expected parent dir for test file")
-        .as_str();
+    let dirname = test.path.parent().expect("Expected parent dir for test file").as_str();
 
     let status_match = expected_status == status;
 
@@ -232,11 +225,7 @@ fn sanitize_dirname(input: &str, dirname: &str) -> String {
 }
 
 fn read_or_empty(file: &Utf8Path) -> Result<String> {
-    if !file.exists() {
-        Ok("".to_string())
-    } else {
-        Ok(std::fs::read_to_string(&file)?)
-    }
+    if !file.exists() { Ok("".to_string()) } else { Ok(std::fs::read_to_string(&file)?) }
 }
 
 #[derive(Debug)]
@@ -259,11 +248,7 @@ impl std::fmt::Display for FailingTestsError {
 }
 
 pub fn report_failing_tests(failing_tests: Vec<Utf8PathBuf>) -> Result<()> {
-    if failing_tests.is_empty() {
-        Ok(())
-    } else {
-        Err(FailingTestsError { failing_tests }.into())
-    }
+    if failing_tests.is_empty() { Ok(()) } else { Err(FailingTestsError { failing_tests }.into()) }
 }
 
 fn fixup_test_if_needed(path: &Utf8Path, contents: String) -> Result<()> {

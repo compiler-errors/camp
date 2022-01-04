@@ -1,7 +1,42 @@
 use camp_files::Span;
 
-use crate::parser::{Parse, ParseBuffer};
+use crate::parser::{Parse, ParseBuffer, Punctuated};
 use crate::{tok, CampResult, Generics};
+
+#[derive(Debug, Hash, Eq, PartialEq)]
+pub struct Path {
+    pub path: Punctuated<PathSegment, tok::ColonColon>,
+}
+
+impl Path {
+    pub fn span(&self) -> Span {
+        self.path
+            .first()
+            .expect("Expected path to have segments")
+            .span()
+            .until(self.path.last().expect("Expected path to have segments").span())
+    }
+}
+
+impl Parse for Path {
+    type Context = ();
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
+        let mut path = Punctuated::new();
+
+        loop {
+            path.push(input.parse()?);
+
+            if input.peek::<tok::ColonColon>() {
+                path.push_punct(input.parse()?);
+            } else {
+                break;
+            }
+        }
+
+        Ok(Path { path })
+    }
+}
 
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub enum PathSegment {

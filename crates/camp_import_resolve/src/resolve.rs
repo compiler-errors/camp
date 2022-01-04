@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
+use std::iter::Peekable;
 use std::sync::Arc;
 
 use camp_parse::{
-    CampResult, CampsiteId, EnumId, ModDecl, ModId, ModuleItem as AstItem, PathSegment, Span, Star,
-    Use as AstUse,
+    CampResult, CampsiteId, EnumId, ModDecl, ModId, ModuleItem as AstItem, Path, PathSegment, Span,
+    Star, Use as AstUse,
 };
 use camp_util::bail;
 use maplit::btreemap;
@@ -35,46 +36,12 @@ pub fn max_visibility_for(
 pub fn lower_use(db: &dyn ResolveDb, u: Arc<AstUse>, module: ModId) -> CampResult<UnresolvedUse> {
     let span = u.span();
     let viz = Visibility::from(&u.viz);
-    let mut segments = u.path.iter_items();
-    let mut first_segment = None;
-
-    let base = match segments.next().expect("Expected to parse a path") {
-        PathSegment::Site(_) => {
-            let site = db.campsite_of(module);
-            db.campsite_root_mod_id(site)
-        },
-        PathSegment::Super(tok) => db.parent_of(module).ok_or_else(|| ResolveError::NoParent {
-            module: db.mod_name(module),
-            span: tok.span,
-        })?,
-        PathSegment::Mod(_) => module,
-        PathSegment::Extern(tok) => {
-            let site = match segments.next() {
-                Some(PathSegment::Ident(site)) => db
-                    .campsite_by_name(site.ident.clone())?
-                    .ok_or_else(|| ResolveError::MissingCampsite {
-                        span: site.span,
-                        module: site.ident.clone(),
-                    })?,
-                Some(pat) => bail!(ResolveError::ExternNeedsCampsite(
-                    tok.span.until(pat.span()),
-                )),
-                None => bail!(ResolveError::ExternNeedsCampsite(tok.span)),
-            };
-
-            db.campsite_root_mod_id(site)
-        },
-        pat @ PathSegment::Ident(_) => {
-            first_segment = Some(pat);
-            module
-        },
-        pat => bail!(ResolveError::UnrecognizedPathSegment(pat.span())),
-    };
+    let (base, segments) = lower_first_path_segment(db, module, &u.path)?;
 
     let mut path = vec![];
     let mut final_star: Option<&Star> = None;
 
-    for segment in first_segment.into_iter().chain(segments) {
+    for segment in segments {
         if let Some(tok) = final_star {
             bail!(ResolveError::StarTrailing(tok.span));
         }
@@ -82,10 +49,10 @@ pub fn lower_use(db: &dyn ResolveDb, u: Arc<AstUse>, module: ModId) -> CampResul
         match segment {
             PathSegment::Ident(ident) => {
                 path.push(ident.clone());
-            },
+            }
             PathSegment::Star(tok) => {
                 final_star = Some(tok);
-            },
+            }
             pat => bail!(ResolveError::UnrecognizedPathSegment(pat.span())),
         }
     }
@@ -98,12 +65,7 @@ pub fn lower_use(db: &dyn ResolveDb, u: Arc<AstUse>, module: ModId) -> CampResul
             ));
         }
 
-        UnresolvedUse::Glob(Arc::new(ItemPath {
-            span,
-            viz,
-            base,
-            segments: path,
-        }))
+        UnresolvedUse::Glob(Arc::new(ItemPath { span, viz, base, segments: path }))
     } else {
         let name = if let Some(name) = &u.rename {
             name.ident.ident.clone()
@@ -113,16 +75,56 @@ pub fn lower_use(db: &dyn ResolveDb, u: Arc<AstUse>, module: ModId) -> CampResul
             db.mod_name(base)
         };
 
-        UnresolvedUse::Named(
-            name,
-            Arc::new(ItemPath {
-                span,
-                viz,
-                base,
-                segments: path,
-            }),
-        )
+        UnresolvedUse::Named(name, Arc::new(ItemPath { span, viz, base, segments: path }))
     })
+}
+
+pub fn lower_first_path_segment<'a>(
+    db: &dyn ResolveDb,
+    module: ModId,
+    path: &'a Path,
+) -> CampResult<(ModId, Peekable<impl Iterator<Item = &'a PathSegment>>)> {
+    let mut segments = path.path.iter_items().peekable();
+
+    let base = match segments.peek().expect("Expected to parse a path") {
+        PathSegment::Site(_) => {
+            segments.next();
+            let site = db.campsite_of(module);
+            db.campsite_root_mod_id(site)
+        }
+        PathSegment::Super(tok) => {
+            segments.next();
+            db.parent_of(module).ok_or_else(|| ResolveError::NoParent {
+                module: db.mod_name(module),
+                span: tok.span,
+            })?
+        }
+        PathSegment::Mod(_) => {
+            segments.next();
+            module
+        }
+        PathSegment::Extern(tok) => {
+            segments.next();
+            let site = match segments.next() {
+                Some(PathSegment::Ident(site)) => db
+                    .campsite_by_name(site.ident.clone())?
+                    .ok_or_else(|| ResolveError::MissingCampsite {
+                        span: site.span,
+                        module: site.ident.clone(),
+                    })?,
+                Some(pat) => bail!(ResolveError::ExternNeedsCampsite(tok.span.until(pat.span()),)),
+                None => bail!(ResolveError::ExternNeedsCampsite(tok.span)),
+            };
+            db.campsite_root_mod_id(site)
+        }
+        PathSegment::Ident(_) => {
+            // Don't call segments.next() here
+            module
+        }
+        pat => bail!(ResolveError::UnrecognizedPathSegment(pat.span())),
+    };
+
+    Ok((base, segments))
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -194,7 +196,7 @@ pub fn campsite_items(db: &dyn ResolveDb, campsite_id: CampsiteId) -> CampResult
                                 // globs, since there can be no cycles so we
                                 // don't need to keep iterating on the glob.
                             }
-                        },
+                        }
                         Item::Enum(e) => {
                             let enum_items = db.enum_items(e)?;
                             new_items = insert_items(
@@ -203,7 +205,7 @@ pub fn campsite_items(db: &dyn ResolveDb, campsite_id: CampsiteId) -> CampResult
                                 glob_path.viz,
                                 glob_path.span,
                             )?;
-                        },
+                        }
                         _ => bail!(ResolveError::NotAGlob {
                             span: glob_path
                                 .segments
@@ -226,12 +228,7 @@ pub fn campsite_items(db: &dyn ResolveDb, campsite_id: CampsiteId) -> CampResult
                 }
             }
 
-            next_modules.insert(*module, EarlyItems {
-                items,
-                glob_items,
-                unresolved_uses,
-                globs,
-            });
+            next_modules.insert(*module, EarlyItems { items, glob_items, unresolved_uses, globs });
         }
 
         modules = next_modules;
@@ -280,7 +277,7 @@ fn populate_items(
             AstItem::Use(u) => match db.lower_use(Arc::clone(u), module)? {
                 UnresolvedUse::Glob(p) => {
                     globs.push(p);
-                },
+                }
                 UnresolvedUse::Named(name, path) => {
                     if let Some(other) = unresolved_uses.get(&name) {
                         bail!(ResolveError::Duplicate(
@@ -293,7 +290,7 @@ fn populate_items(
                     }
 
                     unresolved_uses.insert(name, path);
-                },
+                }
             },
             AstItem::Mod(m) => {
                 if let ModDecl::Submod(decl) = db.lookup_mod_decl(m.id) {
@@ -310,7 +307,7 @@ fn populate_items(
                 } else {
                     unreachable!()
                 };
-            },
+            }
             AstItem::Extern(e) => {
                 let id = db.campsite_by_name(e.name.ident.clone())?.ok_or_else(|| {
                     ResolveError::MissingCampsite {
@@ -327,7 +324,7 @@ fn populate_items(
                     Item::Mod(db.campsite_root_mod_id(id)),
                     Visibility::from(&e.viz),
                 )?;
-            },
+            }
             AstItem::Struct(s) => {
                 insert_item(
                     &mut mod_items,
@@ -336,7 +333,7 @@ fn populate_items(
                     Item::Struct(s.id),
                     Visibility::from(&s.viz),
                 )?;
-            },
+            }
             AstItem::Enum(e) => {
                 insert_item(
                     &mut mod_items,
@@ -345,7 +342,7 @@ fn populate_items(
                     Item::Enum(e.id),
                     Visibility::from(&e.viz),
                 )?;
-            },
+            }
             AstItem::Function(f) => {
                 insert_item(
                     &mut mod_items,
@@ -354,7 +351,7 @@ fn populate_items(
                     Item::Function(f.id),
                     Visibility::from(&f.sig.viz),
                 )?;
-            },
+            }
             AstItem::Trait(t) => {
                 insert_item(
                     &mut mod_items,
@@ -363,19 +360,17 @@ fn populate_items(
                     Item::Trait(t.id),
                     Visibility::from(&t.viz),
                 )?;
-            },
+            }
             AstItem::Impl(_) => {
                 // Cannot be referenced by name, so it doesn't declare an item
-            },
+            }
         }
     }
 
-    campsite_items.insert(module, EarlyItems {
-        items: mod_items,
-        unresolved_uses,
-        globs,
-        glob_items: btreemap![],
-    });
+    campsite_items.insert(
+        module,
+        EarlyItems { items: mod_items, unresolved_uses, globs, glob_items: btreemap![] },
+    );
     Ok(())
 }
 
@@ -481,7 +476,7 @@ fn resolve_and_validate_path(
                         return Ok(None);
                     }
                 }
-            },
+            }
             Item::Enum(id) => {
                 let enum_items = db.enum_items(*id)?;
                 let item_viz = enum_items.get(&segment.ident);
@@ -513,7 +508,7 @@ fn resolve_and_validate_path(
                         span: segment.span,
                     });
                 }
-            },
+            }
             _ => bail!(ResolveError::NotASource {
                 span: current_item_span,
                 kind: current_item.kind(),
@@ -523,11 +518,7 @@ fn resolve_and_validate_path(
         }
     }
 
-    Ok(Some(ItemViz {
-        item: current_item,
-        viz: path.viz,
-        span: path.span,
-    }))
+    Ok(Some(ItemViz { item: current_item, viz: path.viz, span: path.span }))
 }
 
 fn insert_items<'a>(
@@ -543,11 +534,8 @@ fn insert_items<'a>(
             continue;
         }
 
-        let new_item = ItemViz {
-            viz: reexport_viz,
-            item: source_item.item.clone(),
-            span: reexport_span,
-        };
+        let new_item =
+            ItemViz { viz: reexport_viz, item: source_item.item.clone(), span: reexport_span };
 
         if let Some(other_item) = dest.get(name) {
             if *other_item != new_item {

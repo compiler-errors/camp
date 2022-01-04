@@ -1,7 +1,5 @@
 use std::any::Any;
-use std::cmp::Ordering;
 use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
 
 use codespan_derive::IntoDiagnostic;
 

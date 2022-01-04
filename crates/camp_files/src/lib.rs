@@ -11,7 +11,7 @@ use camp_util::{bail, id_type, BoxedError};
 use codespan_derive::IntoLabel;
 use maplit::btreemap;
 
-pub use crate::result::FileError;
+use crate::result::FileError;
 
 id_type!(pub FileId);
 
@@ -72,10 +72,7 @@ fn campsites_by_name(db: &dyn FilesDb) -> CampResult<Arc<BTreeMap<String, Campsi
         } else {
             mapping.insert(
                 arg.name.clone(),
-                db.campsite_decl(Arc::new(CampsiteDecl {
-                    name: arg.name.clone(),
-                    file_id,
-                })),
+                db.campsite_decl(Arc::new(CampsiteDecl { name: arg.name.clone(), file_id })),
             );
         }
     }
@@ -128,9 +125,7 @@ fn lookup_file_id(db: &dyn FilesDb, id: FileId) -> Utf8PathBuf {
 fn open_file(db: &dyn FilesDb, id: FileId) -> CampResult<Arc<str>> {
     let path: Utf8PathBuf = db.lookup_file_id(id);
 
-    Ok(std::fs::read_to_string(&path)
-        .map_err(FileError::from)?
-        .into())
+    Ok(std::fs::read_to_string(&path).map_err(FileError::from)?.into())
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -143,11 +138,7 @@ impl Span {
     }
 
     pub fn until_maybe(self, other: Option<Span>) -> Span {
-        if let Some(other) = other {
-            self.until(other)
-        } else {
-            self
-        }
+        if let Some(other) = other { self.until(other) } else { self }
     }
 
     pub fn shrink_to_lo(self) -> Span {
@@ -186,10 +177,7 @@ impl FromStr for CampsiteArg {
 
     fn from_str(arg: &str) -> Result<Self, Self::Err> {
         if let Some((name, path)) = arg.split_once('=') {
-            Ok(CampsiteArg {
-                name: name.to_string(),
-                path: Utf8PathBuf::from(path),
-            })
+            Ok(CampsiteArg { name: name.to_string(), path: Utf8PathBuf::from(path) })
         } else {
             Err(format!("Expected '=' in campsite argument: {}", arg))
         }

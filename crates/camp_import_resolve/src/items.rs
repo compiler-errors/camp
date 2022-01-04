@@ -2,8 +2,12 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use camp_parse::{
-    EnumId, FunctionId, Ident, ImplId, ModId, Span, StructId, TraitId, Visibility as AstVisibility,
+    CampResult, EnumId, FunctionId, Ident, ImplId, ModId, Span, StructId, TraitId,
+    Visibility as AstVisibility,
 };
+use camp_util::bail;
+
+use crate::result::ResolveError;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ItemViz {
@@ -20,9 +24,6 @@ pub enum Item {
     EnumVariant(EnumId, String),
     Function(FunctionId),
     Trait(TraitId),
-    /// These items are not nameable, but this variant exists for use in
-    /// downstream crates
-    Impl(ImplId),
 }
 
 impl Item {
@@ -34,7 +35,13 @@ impl Item {
             Item::EnumVariant(_, _) => "enum variant",
             Item::Function(_) => "function",
             Item::Trait(_) => "trait",
-            Item::Impl(_) => "impl",
+        }
+    }
+
+    pub fn expect_trait(&self, span: Span) -> CampResult<TraitId> {
+        match self {
+            Item::Trait(id) => Ok(*id),
+            _ => bail!(ResolveError::ExpectedFound { span, expected: "trait", found: self.kind() }),
         }
     }
 }
@@ -55,7 +62,6 @@ from! {
     Enum: EnumId,
     Function: FunctionId,
     Trait: TraitId,
-    Impl: ImplId,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

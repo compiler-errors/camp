@@ -57,6 +57,12 @@ macro_rules! wrapper_id_type {
             }
         }
 
+        impl Into<$wrapped> for &$name {
+            fn into(self) -> $wrapped {
+                self.0
+            }
+        }
+
         impl Into<u32> for $name where $wrapped: Into<u32> {
             fn into(self) -> u32 {
                 self.0.into()

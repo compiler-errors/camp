@@ -5,12 +5,12 @@ use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 pub use camp_files::CampsiteArg;
-use camp_files::{FilesDb, FilesStorage, CampResult};
+use camp_files::{CampResult, FilesDb, FilesStorage};
 use camp_import_resolve::{ResolveDb, ResolveStorage};
 use camp_lex::lex;
 use camp_parse::{ParseDb, ParseStorage};
 
-pub use crate::result::{DriverError};
+pub use crate::result::DriverError;
 
 #[salsa::database(ParseStorage, FilesStorage, ResolveStorage)]
 #[derive(Default)]
@@ -35,9 +35,8 @@ pub fn parse_stage(db: &mut CampDb, root: CampsiteArg) -> CampResult<()> {
     let root_name = root.name.clone();
     db.set_campsites(Arc::new([root]));
 
-    let root_id = db
-        .campsite_by_name(root_name)?
-        .expect("Expected root campsite to exist, since we set it");
+    let root_id =
+        db.campsite_by_name(root_name)?.expect("Expected root campsite to exist, since we set it");
     let root_ast = db.campsite_ast(root_id)?;
 
     println!("{:#?}", root_ast);
@@ -54,9 +53,8 @@ pub fn verify_stage(
     libs.push(root);
     db.set_campsites(libs.into());
 
-    let root_id = db
-        .campsite_by_name(root_name)?
-        .expect("Expected root campsite to exist, since we set it");
+    let root_id =
+        db.campsite_by_name(root_name)?.expect("Expected root campsite to exist, since we set it");
     let root_items = db.campsite_items(root_id)?;
 
     println!("{:#?}", root_items);

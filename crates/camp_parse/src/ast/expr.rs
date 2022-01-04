@@ -5,7 +5,7 @@ use derivative::Derivative;
 
 use crate::parser::{Parse, ParseBuffer, Punctuated, ShouldParse};
 use crate::{
-    tok, CampResult, Generics, ParseError, Pat, PathSegment, ReturnTy, Span, Ty, TyElaborated,
+    tok, CampResult, Generics, ParseError, Pat, Path, PathSegment, ReturnTy, Span, Ty, TyElaborated,
 };
 
 #[derive(Copy, Clone)]
@@ -17,35 +17,19 @@ pub struct ExprContext {
 
 impl ExprContext {
     pub fn any_expr() -> ExprContext {
-        ExprContext {
-            consume_braces: true,
-            allow_let: false,
-            prec: Prec::Lowest,
-        }
+        ExprContext { consume_braces: true, allow_let: false, prec: Prec::Lowest }
     }
 
     fn any_expr_before_braces() -> ExprContext {
-        ExprContext {
-            consume_braces: false,
-            allow_let: false,
-            prec: Prec::Lowest,
-        }
+        ExprContext { consume_braces: false, allow_let: false, prec: Prec::Lowest }
     }
 
     fn any_stmt() -> ExprContext {
-        ExprContext {
-            consume_braces: true,
-            allow_let: true,
-            prec: Prec::Lowest,
-        }
+        ExprContext { consume_braces: true, allow_let: true, prec: Prec::Lowest }
     }
 
     fn subexpr_with_prec(self, prec: Prec) -> ExprContext {
-        ExprContext {
-            prec,
-            allow_let: false,
-            ..self
-        }
+        ExprContext { prec, allow_let: false, ..self }
     }
 
     fn any_subexpr(self) -> ExprContext {
@@ -77,7 +61,7 @@ pub enum Expr {
     #[derivative(Debug = "transparent")]
     Block(ExprBlock),
     #[derivative(Debug = "transparent")]
-    Path(ExprPath),
+    Path(Path),
     #[derivative(Debug = "transparent")]
     Elaborated(ExprElaborated),
     #[derivative(Debug = "transparent")]
@@ -190,8 +174,6 @@ impl Expr {
             Expr::expr_control_flow(input, ctx)?
         } else if input.peek::<tok::LCurly>() {
             Expr::expr_block(input, ctx)?
-        } else if input.peek::<tok::Ident>() || input.peek::<tok::Site>() {
-            Expr::expr_path(input, ctx)?
         } else if input.peek::<tok::Lt>() {
             Expr::expr_elaborated(input, ctx)?
         } else if input.peek::<tok::Number>() {
@@ -213,7 +195,7 @@ impl Expr {
         } else if input.peek::<tok::Pipe>() {
             Expr::expr_closure(input, ctx)?
         } else {
-            input.error_exhausted()?;
+            Expr::expr_path(input, ctx)?
         })
     }
 
@@ -229,6 +211,8 @@ impl Expr {
             }
         }
 
+        let path = Path { path };
+
         if ctx.consume_braces && input.peek::<tok::LCurly>() {
             let (lcurly_tok, contents, rcurly_tok) = input.parse_between_curlys()?;
             Ok(Expr::Constructor(ExprConstructor {
@@ -238,7 +222,7 @@ impl Expr {
                 rcurly_tok,
             }))
         } else {
-            Ok(Expr::Path(ExprPath { path }))
+            Ok(Expr::Path(path))
         }
     }
 
@@ -257,11 +241,7 @@ impl Expr {
             }
         }
 
-        Ok(Expr::Elaborated(ExprElaborated {
-            ty,
-            colon_colon_tok,
-            path,
-        }))
+        Ok(Expr::Elaborated(ExprElaborated { ty, colon_colon_tok, path }))
     }
 
     fn expr_lit(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> CampResult<Expr> {
@@ -300,11 +280,7 @@ impl Expr {
             Some(input.parse_with(ctx.any_subexpr())?)
         };
 
-        Ok(Expr::Break(ExprBreak {
-            break_tok,
-            label,
-            expr,
-        }))
+        Ok(Expr::Break(ExprBreak { break_tok, label, expr }))
     }
 
     pub fn expr_block(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> CampResult<Expr> {
@@ -337,12 +313,7 @@ impl Expr {
 
         contents.expect_empty(rcurly_tok)?;
 
-        Ok(Expr::Block(ExprBlock {
-            lcurly_tok,
-            stmts,
-            final_expr,
-            rcurly_tok,
-        }))
+        Ok(Expr::Block(ExprBlock { lcurly_tok, stmts, final_expr, rcurly_tok }))
     }
 
     fn expr_return(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> CampResult<Expr> {
@@ -360,10 +331,7 @@ impl Expr {
     }
 
     fn expr_continue(input: &mut ParseBuffer<'_>, _ctx: ExprContext) -> CampResult<Expr> {
-        Ok(Expr::Continue(ExprContinue {
-            continue_tok: input.parse()?,
-            label: input.parse()?,
-        }))
+        Ok(Expr::Continue(ExprContinue { continue_tok: input.parse()?, label: input.parse()? }))
     }
 
     fn expr_let(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> CampResult<Expr> {
@@ -457,13 +425,7 @@ impl Expr {
 
         contents.expect_empty(rcurly_tok)?;
 
-        Ok(Expr::Match(ExprMatch {
-            match_tok,
-            expr,
-            lcurly_tok,
-            arms,
-            rcurly_tok,
-        }))
+        Ok(Expr::Match(ExprMatch { match_tok, expr, lcurly_tok, arms, rcurly_tok }))
     }
 
     fn expr_if(input: &mut ParseBuffer<'_>, ctx: ExprContext) -> CampResult<Expr> {
@@ -515,13 +477,7 @@ impl Expr {
             input.parse_with(ctx.any_subexpr())?
         };
 
-        Ok(Expr::Closure(ExprClosure {
-            lpipe_tok,
-            parameters,
-            rpipe_tok,
-            return_ty,
-            expr,
-        }))
+        Ok(Expr::Closure(ExprClosure { lpipe_tok, parameters, rpipe_tok, return_ty, expr }))
     }
 
     fn expr_range_trailing(input: &mut ParseBuffer<'_>, expr: Option<Expr>) -> CampResult<Expr> {
@@ -584,12 +540,7 @@ impl Expr {
 
         contents.expect_empty(rsq_tok)?;
 
-        Ok(Expr::Index(ExprIndex {
-            lsq_tok,
-            left: Arc::new(expr),
-            rsq_tok,
-            right,
-        }))
+        Ok(Expr::Index(ExprIndex { lsq_tok, left: Arc::new(expr), rsq_tok, right }))
     }
 
     fn expr_cast(input: &mut ParseBuffer<'_>, expr: Expr) -> CampResult<Expr> {
@@ -677,18 +628,12 @@ impl Expr {
                 .first()
                 .expect("expected path to have segments")
                 .span()
-                .until(
-                    e.path
-                        .last()
-                        .expect("expected path to have segments")
-                        .span(),
-                ),
-            Expr::Elaborated(e) => e.ty.lt_tok.span.until(
-                e.path
-                    .last()
-                    .expect("expected path to have segments")
-                    .span(),
-            ),
+                .until(e.path.last().expect("expected path to have segments").span()),
+            Expr::Elaborated(e) => {
+                e.ty.lt_tok
+                    .span
+                    .until(e.path.last().expect("expected path to have segments").span())
+            }
             Expr::Literal(ExprLiteral::Number(n)) => n.span,
             Expr::Literal(ExprLiteral::String(s)) => s.span,
             Expr::Group(e) => e.lparen_tok.span.until(e.rparen_tok.span),
@@ -703,19 +648,33 @@ impl Expr {
             Expr::Loop(e) => e.loop_tok.span.until(e.branch.span()),
             Expr::While(e) => e.while_tok.span.until(e.branch.span()),
             Expr::For(e) => e.for_tok.span.until(e.branch.span()),
-            Expr::Unary(e) => todo!(),
-            Expr::Binary(e) => todo!(),
-            Expr::RangeTrailing(e) => todo!(),
-            Expr::RangeInclusive(e) => todo!(),
-            Expr::Range(_) => todo!(),
-            Expr::Index(_) => todo!(),
-            Expr::Call(_) => todo!(),
-            Expr::Constructor(_) => todo!(),
-            Expr::Access(_) => todo!(),
-            Expr::Break(_) => todo!(),
-            Expr::Continue(_) => todo!(),
-            Expr::Return(_) => todo!(),
-            Expr::Closure(_) => todo!(),
+            Expr::Unary(e) => e.op.span().until(e.expr.span()),
+            Expr::Binary(e) => e.left.span().until(e.right.span()),
+            Expr::RangeTrailing(e) => {
+                e.dot_dot_dot_tok.span.until_maybe(e.expr.as_ref().map(|e| e.span()))
+            }
+            Expr::RangeInclusive(e) => e
+                .right
+                .span()
+                .until(e.dot_dot_eq_tok.span)
+                .until_maybe(e.left.as_ref().map(|e| e.span())),
+            Expr::Range(e) => e
+                .right
+                .span()
+                .until(e.dot_dot_tok.span)
+                .until_maybe(e.left.as_ref().map(|e| e.span())),
+            Expr::Index(e) => e.left.span().until(e.rsq_tok.span),
+            Expr::Call(e) => e.expr.span().until(e.rparen_tok.span),
+            Expr::Constructor(e) => e.path.span().until(e.rcurly_tok.span),
+            Expr::Access(e) => e.expr.span().until(e.kind.span()),
+            Expr::Break(e) => e
+                .break_tok
+                .span
+                .until_maybe(e.label.as_ref().map(|e| e.span))
+                .until_maybe(e.expr.as_ref().map(|e| e.span())),
+            Expr::Continue(e) => e.continue_tok.span.until_maybe(e.label.as_ref().map(|e| e.span)),
+            Expr::Return(e) => e.return_tok.span.until_maybe(e.expr.as_ref().map(|e| e.span())),
+            Expr::Closure(e) => e.lpipe_tok.span.until(e.expr.span()),
             Expr::Cast(e) => e.expr.span().until(e.ty.span()),
         }
     }
@@ -727,11 +686,6 @@ pub struct ExprBlock {
     pub stmts: Vec<Expr>,
     pub final_expr: Option<Arc<Expr>>,
     pub rcurly_tok: tok::RCurly,
-}
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct ExprPath {
-    pub path: Punctuated<PathSegment, tok::ColonColon>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -797,10 +751,7 @@ impl Parse for TypeAnnotation {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(TypeAnnotation {
-            colon_tok: input.parse()?,
-            ty: input.parse()?,
-        })
+        Ok(TypeAnnotation { colon_tok: input.parse()?, ty: input.parse()? })
     }
 }
 
@@ -900,10 +851,7 @@ impl Parse for LoopLabel {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(LoopLabel {
-            lifetime: input.parse()?,
-            colon_tok: input.parse()?,
-        })
+        Ok(LoopLabel { lifetime: input.parse()?, colon_tok: input.parse()? })
     }
 }
 
@@ -943,6 +891,17 @@ pub enum AccessKind {
     Number(tok::Number),
 }
 
+impl AccessKind {
+    fn span(&self) -> Span {
+        match self {
+            AccessKind::Ident(i, g) => {
+                i.span.until_maybe(g.as_ref().map(|g| g.generics.gt_tok.span))
+            }
+            AccessKind::Number(n) => n.span,
+        }
+    }
+}
+
 impl Parse for AccessKind {
     type Context = ();
 
@@ -967,10 +926,7 @@ impl Parse for AccessGenerics {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(AccessGenerics {
-            colon_colon_tok: input.parse()?,
-            generics: input.parse()?,
-        })
+        Ok(AccessGenerics { colon_colon_tok: input.parse()?, generics: input.parse()? })
     }
 }
 
@@ -988,29 +944,21 @@ pub struct ExprUnary {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum UnaryOperator {
-    Ref,
-    RefMut,
-    Star,
-    Minus,
-    Not,
+    Ref(tok::Amp),
+    RefMut(tok::Amp, tok::Mut),
+    Star(tok::Star),
+    Minus(tok::Minus),
+    Not(tok::Bang),
 }
 
 impl UnaryOperator {
-    fn peek(input: &mut ParseBuffer<'_>) -> Option<UnaryOperator> {
-        if input.peek::<tok::Amp>() {
-            if input.peek2::<tok::Mut>() {
-                Some(UnaryOperator::RefMut)
-            } else {
-                Some(UnaryOperator::Ref)
-            }
-        } else if input.peek::<tok::Star>() {
-            Some(UnaryOperator::Star)
-        } else if input.peek::<tok::Minus>() {
-            Some(UnaryOperator::Minus)
-        } else if input.peek::<tok::Bang>() {
-            Some(UnaryOperator::Not)
-        } else {
-            None
+    fn span(&self) -> Span {
+        match self {
+            UnaryOperator::Ref(t) => t.span,
+            UnaryOperator::RefMut(t, t2) => t.span.until(t2.span),
+            UnaryOperator::Star(t) => t.span,
+            UnaryOperator::Minus(t) => t.span,
+            UnaryOperator::Not(t) => t.span,
         }
     }
 }
@@ -1019,28 +967,31 @@ impl Parse for UnaryOperator {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        match UnaryOperator::peek(input) {
-            // If we have `&mut`, peek consume two tokens
-            Some(u @ UnaryOperator::RefMut) => {
-                input.bump_tok().expect("Expect &");
-                input.bump_tok().expect("Expect mut");
-                Ok(u)
-            },
-            // If we have any other unary, consume one token
-            Some(u) => {
-                input.bump_tok().expect("Expect token");
-                Ok(u)
-            },
-            None => {
-                input.error_exhausted()?;
-            },
-        }
+        Ok(if input.peek::<tok::Amp>() {
+            let amp_tok = input.parse()?;
+            if let Some(mut_tok) = input.parse::<Option<tok::Mut>>()? {
+                UnaryOperator::RefMut(amp_tok, mut_tok)
+            } else {
+                UnaryOperator::Ref(amp_tok)
+            }
+        } else if input.peek::<tok::Star>() {
+            UnaryOperator::Star(input.parse()?)
+        } else if input.peek::<tok::Minus>() {
+            UnaryOperator::Minus(input.parse()?)
+        } else if input.peek::<tok::Bang>() {
+            UnaryOperator::Not(input.parse()?)
+        } else {
+            input.error_exhausted()?;
+        })
     }
 }
 
 impl ShouldParse for UnaryOperator {
     fn should_parse(input: &mut ParseBuffer<'_>) -> bool {
-        UnaryOperator::peek(input).is_some()
+        input.peek::<tok::Amp>()
+            || input.peek::<tok::Star>()
+            || input.peek::<tok::Minus>()
+            || input.peek::<tok::Bang>()
     }
 }
 
@@ -1053,104 +1004,73 @@ pub struct ExprBinary {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum BinaryOperator {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Modulus,
-    Or,
-    And,
-    OrCircuit,
-    AndCircuit,
-    Assign,
-    Equals,
-    NotEquals,
-    Lesser,
-    Greater,
-    LesserEquals,
-    GreaterEquals,
+    Add(tok::Plus),
+    Subtract(tok::Minus),
+    Multiply(tok::Star),
+    Divide(tok::Slash),
+    Modulus(tok::Percent),
+    Or(tok::Pipe),
+    And(tok::Amp),
+    OrCircuit(tok::PipePipe),
+    AndCircuit(tok::AmpAmp),
+    Assign(tok::Eq),
+    Equals(tok::EqEq),
+    NotEquals(tok::BangEq),
+    Lesser(tok::Lt),
+    Greater(tok::Gt),
+    LesserEquals(tok::LtEq),
+    GreaterEquals(tok::GtEq),
 }
 
 impl BinaryOperator {
-    fn peek(input: &mut ParseBuffer<'_>) -> Option<BinaryOperator> {
-        if input.peek::<tok::Plus>() {
-            Some(BinaryOperator::Add)
-        } else if input.peek::<tok::Minus>() {
-            Some(BinaryOperator::Subtract)
-        } else if input.peek::<tok::Star>() {
-            Some(BinaryOperator::Multiply)
-        } else if input.peek::<tok::Slash>() {
-            Some(BinaryOperator::Divide)
-        } else if input.peek::<tok::Percent>() {
-            Some(BinaryOperator::Modulus)
-        } else if input.peek::<tok::Pipe>() {
-            Some(BinaryOperator::Or)
-        } else if input.peek::<tok::Amp>() {
-            Some(BinaryOperator::And)
-        } else if input.peek::<tok::PipePipe>() {
-            Some(BinaryOperator::OrCircuit)
-        } else if input.peek::<tok::AmpAmp>() {
-            Some(BinaryOperator::AndCircuit)
-        } else if input.peek::<tok::Eq>() {
-            Some(BinaryOperator::Assign)
-        } else if input.peek::<tok::EqEq>() {
-            Some(BinaryOperator::Equals)
-        } else if input.peek::<tok::BangEq>() {
-            Some(BinaryOperator::NotEquals)
-        } else if input.peek::<tok::LtEq>() {
-            Some(BinaryOperator::LesserEquals)
-        } else if input.peek::<tok::GtEq>() {
-            Some(BinaryOperator::GreaterEquals)
-        } else if input.peek::<tok::Lt>() {
-            Some(BinaryOperator::Lesser)
-        } else if input.peek::<tok::Gt>() {
-            Some(BinaryOperator::Greater)
-        } else {
-            None
-        }
-    }
-
     fn maybe_prec(input: &mut ParseBuffer<'_>) -> Option<Prec> {
-        BinaryOperator::peek(input).map(BinaryOperator::prec_of)
+        Some(if input.peek::<tok::Plus>() || input.peek::<tok::Minus>() {
+            Prec::Add
+        } else if input.peek::<tok::Star>()
+            || input.peek::<tok::Slash>()
+            || input.peek::<tok::Percent>()
+        {
+            Prec::Multiply
+        } else if input.peek::<tok::Pipe>() {
+            Prec::Or
+        } else if input.peek::<tok::Amp>() {
+            Prec::And
+        } else if input.peek::<tok::PipePipe>() {
+            Prec::OrCircuit
+        } else if input.peek::<tok::AmpAmp>() {
+            Prec::AndCircuit
+        } else if input.peek::<tok::Eq>() {
+            Prec::Assign
+        } else if input.peek::<tok::EqEq>()
+            || input.peek::<tok::BangEq>()
+            || input.peek::<tok::LtEq>()
+            || input.peek::<tok::GtEq>()
+            || input.peek::<tok::Lt>()
+            || input.peek::<tok::Gt>()
+        {
+            Prec::Comparison
+        } else {
+            return None;
+        })
     }
 
     fn prec_of(self) -> Prec {
         match self {
-            BinaryOperator::Add | BinaryOperator::Subtract => Prec::Add,
-            BinaryOperator::Multiply | BinaryOperator::Divide | BinaryOperator::Modulus =>
-                Prec::Multiply,
-            BinaryOperator::Or => Prec::Or,
-            BinaryOperator::And => Prec::And,
-            BinaryOperator::Assign => Prec::Assign,
-            BinaryOperator::Lesser
-            | BinaryOperator::Greater
-            | BinaryOperator::Equals
-            | BinaryOperator::NotEquals
-            | BinaryOperator::LesserEquals
-            | BinaryOperator::GreaterEquals => Prec::Comparison,
-            BinaryOperator::OrCircuit => Prec::OrCircuit,
-            BinaryOperator::AndCircuit => Prec::AndCircuit,
-        }
-    }
-
-    fn num_tokens(self) -> usize {
-        match self {
-            BinaryOperator::Add
-            | BinaryOperator::Subtract
-            | BinaryOperator::Multiply
-            | BinaryOperator::Divide
-            | BinaryOperator::Modulus
-            | BinaryOperator::Or
-            | BinaryOperator::And
-            | BinaryOperator::Assign
-            | BinaryOperator::Lesser => 1,
-            BinaryOperator::Greater
-            | BinaryOperator::OrCircuit
-            | BinaryOperator::AndCircuit
-            | BinaryOperator::Equals
-            | BinaryOperator::NotEquals
-            | BinaryOperator::LesserEquals
-            | BinaryOperator::GreaterEquals => 2,
+            BinaryOperator::Add(_) | BinaryOperator::Subtract(_) => Prec::Add,
+            BinaryOperator::Multiply(_)
+            | BinaryOperator::Divide(_)
+            | BinaryOperator::Modulus(_) => Prec::Multiply,
+            BinaryOperator::Or(_) => Prec::Or,
+            BinaryOperator::And(_) => Prec::And,
+            BinaryOperator::Assign(_) => Prec::Assign,
+            BinaryOperator::Lesser(_)
+            | BinaryOperator::Greater(_)
+            | BinaryOperator::Equals(_)
+            | BinaryOperator::NotEquals(_)
+            | BinaryOperator::LesserEquals(_)
+            | BinaryOperator::GreaterEquals(_) => Prec::Comparison,
+            BinaryOperator::OrCircuit(_) => Prec::OrCircuit,
+            BinaryOperator::AndCircuit(_) => Prec::AndCircuit,
         }
     }
 }
@@ -1159,21 +1079,62 @@ impl Parse for BinaryOperator {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        if let Some(op) = BinaryOperator::peek(input) {
-            for _ in 0..op.num_tokens() {
-                input.bump_tok().expect("Expect token");
-            }
-
-            Ok(op)
+        Ok(if input.peek::<tok::Plus>() {
+            BinaryOperator::Add(input.parse()?)
+        } else if input.peek::<tok::Minus>() {
+            BinaryOperator::Subtract(input.parse()?)
+        } else if input.peek::<tok::Star>() {
+            BinaryOperator::Multiply(input.parse()?)
+        } else if input.peek::<tok::Slash>() {
+            BinaryOperator::Divide(input.parse()?)
+        } else if input.peek::<tok::Percent>() {
+            BinaryOperator::Modulus(input.parse()?)
+        } else if input.peek::<tok::Pipe>() {
+            BinaryOperator::Or(input.parse()?)
+        } else if input.peek::<tok::Amp>() {
+            BinaryOperator::And(input.parse()?)
+        } else if input.peek::<tok::PipePipe>() {
+            BinaryOperator::OrCircuit(input.parse()?)
+        } else if input.peek::<tok::AmpAmp>() {
+            BinaryOperator::AndCircuit(input.parse()?)
+        } else if input.peek::<tok::Eq>() {
+            BinaryOperator::Assign(input.parse()?)
+        } else if input.peek::<tok::EqEq>() {
+            BinaryOperator::Equals(input.parse()?)
+        } else if input.peek::<tok::BangEq>() {
+            BinaryOperator::NotEquals(input.parse()?)
+        } else if input.peek::<tok::LtEq>() {
+            BinaryOperator::LesserEquals(input.parse()?)
+        } else if input.peek::<tok::GtEq>() {
+            BinaryOperator::GreaterEquals(input.parse()?)
+        } else if input.peek::<tok::Lt>() {
+            BinaryOperator::Lesser(input.parse()?)
+        } else if input.peek::<tok::Gt>() {
+            BinaryOperator::Greater(input.parse()?)
         } else {
             input.error_exhausted()?;
-        }
+        })
     }
 }
 
 impl ShouldParse for BinaryOperator {
     fn should_parse(input: &mut ParseBuffer<'_>) -> bool {
-        BinaryOperator::peek(input).is_some()
+        input.peek::<tok::Plus>()
+            || input.peek::<tok::Minus>()
+            || input.peek::<tok::Star>()
+            || input.peek::<tok::Slash>()
+            || input.peek::<tok::Percent>()
+            || input.peek::<tok::Pipe>()
+            || input.peek::<tok::Amp>()
+            || input.peek::<tok::PipePipe>()
+            || input.peek::<tok::AmpAmp>()
+            || input.peek::<tok::Eq>()
+            || input.peek::<tok::EqEq>()
+            || input.peek::<tok::BangEq>()
+            || input.peek::<tok::LtEq>()
+            || input.peek::<tok::GtEq>()
+            || input.peek::<tok::Lt>()
+            || input.peek::<tok::Gt>()
     }
 }
 
@@ -1234,7 +1195,7 @@ pub struct ExprReturn {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExprConstructor {
-    path: Punctuated<PathSegment, tok::ColonColon>,
+    path: Path,
     lcurly_tok: tok::LCurly,
     args: Punctuated<ConstructorArg, tok::Comma>,
     rcurly_tok: tok::RCurly,
@@ -1250,10 +1211,7 @@ impl Parse for ConstructorArg {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(ConstructorArg {
-            ident: input.parse()?,
-            expr: input.parse()?,
-        })
+        Ok(ConstructorArg { ident: input.parse()?, expr: input.parse()? })
     }
 }
 
@@ -1299,10 +1257,7 @@ impl Parse for ClosureParameter {
     type Context = ();
 
     fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
-        Ok(ClosureParameter {
-            pat: input.parse()?,
-            ty: input.parse()?,
-        })
+        Ok(ClosureParameter { pat: input.parse()?, ty: input.parse()? })
     }
 }
 

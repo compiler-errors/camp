@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use camp_files::Span;
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub enum Token {
     BeginDelim(TokenBeginDelim),
     EndDelim(TokenEndDelim),
@@ -23,19 +23,19 @@ impl Token {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub struct TokenBeginDelim {
     pub delimiter: TokenDelim,
     pub span: Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub struct TokenEndDelim {
     pub delimiter: TokenDelim,
     pub span: Span,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum TokenDelim {
     Curly,
     Sq,
@@ -52,26 +52,26 @@ impl Display for TokenDelim {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub struct TokenIdent {
     pub ident: String,
     pub span: Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub struct TokenPunct {
     pub punct: char,
     pub span: Span,
     pub trailing_whitespace: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub struct TokenLiteral {
     pub literal: TokenLiteralKind,
     pub span: Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub enum TokenLiteralKind {
     Number(String),
     Char(char),
