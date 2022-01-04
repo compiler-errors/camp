@@ -1,3 +1,17 @@
+use std::collections::{BTreeMap, HashMap};
+use std::iter::Peekable;
+use std::sync::Arc;
+
+use camp_ast::Span;
+use camp_ast::{self as ast, CampResult};
+use camp_hir::{Lifetime, Ty, TyId, TyKind};
+use camp_import_resolve::Item;
+use camp_util::bail;
+
+use crate::path::PartialRes;
+use crate::result::LoweringError;
+use crate::{HirDb, StringId};
+
 pub struct Resolver<T: ResolveContext> {
     pub rcx: T,
 }

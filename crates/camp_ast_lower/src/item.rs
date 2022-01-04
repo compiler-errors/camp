@@ -1,16 +1,13 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
+use ast::ItemId;
 use camp_ast::{
-    CampResult, {self as ast},
+    self as ast, CampResult, CampsiteId, EnumId, FunctionId, ImplId, ModId, StructId, TraitId,
 };
-pub use camp_ast::{CampsiteId, EnumId, FunctionId, ImplId, ItemId, ModId, StructId, TraitId};
+use camp_hir::{Enum, Function, Impl, Mod, Struct, Trait};
 use maplit::btreemap;
 
 use crate::HirDb;
-use crate::{
-    resolver::{ResolveContext, Resolver},
-    TyKind,
-};
 
 pub fn campsite_hir(db: &dyn HirDb, id: CampsiteId) -> CampResult<Arc<Mod>> {
     db.mod_hir(db.campsite_root_mod_id(id))
@@ -86,33 +83,6 @@ pub fn trait_hir(db: &dyn HirDb, id: TraitId) -> CampResult<Arc<Trait>> {
 pub fn impl_hir(db: &dyn HirDb, id: ImplId) -> CampResult<Arc<Impl>> {
     todo!()
 }
-
-impl<T: ResolveContext> Resolver<T> {}
-
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub struct Mod {
-    modules: BTreeMap<ModId, Arc<Mod>>,
-    structs: BTreeMap<StructId, Arc<Struct>>,
-    enums: BTreeMap<EnumId, Arc<Enum>>,
-    functions: BTreeMap<FunctionId, Arc<Function>>,
-    traits: BTreeMap<TraitId, Arc<Trait>>,
-    impls: BTreeMap<ImplId, Arc<Impl>>,
-}
-
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub struct Struct;
-
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub struct Enum;
-
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub struct Function;
-
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub struct Trait;
-
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub struct Impl;
 
 pub fn generics_count(db: &dyn HirDb, id: ItemId) -> CampResult<(usize, usize, bool)> {
     let mut bindings_allowed = false;

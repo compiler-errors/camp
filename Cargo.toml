@@ -6,14 +6,15 @@ exclude = ["ui_test", "std"]
 
 [workspace]
 members = [
+    "crates/camp_ast",
+    "crates/camp_ast_lower",
     "crates/camp_driver",
-    "crates/camp_util",
     "crates/camp_files",
+    "crates/camp_hir",
+    "crates/camp_import_resolve",
     "crates/camp_lex",
     "crates/camp_parse",
-    "crates/camp_import_resolve",
-    "crates/camp_hir",
-    "crates/camp_ast",
+    "crates/camp_util",
 ]
 
 [dependencies]
@@ -21,7 +22,7 @@ camino = "1.0.5"
 camp_driver = { path = "crates/camp_driver" }
 codespan-derive = "0.1.1"
 codespan-reporting = "0.11.1"
+env_logger = "0.9.0"
 log = "0.4.14"
 structopt = "0.3.25"
 termcolor = "1.1.2"
-env_logger = "0.9.0"

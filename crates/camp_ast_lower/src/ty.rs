@@ -1,96 +1,16 @@
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use camp_ast::{self as ast, CampResult};
-use camp_util::{bail, id_type, IteratorExt};
+use camp_ast::{self as ast, CampResult, Span};
+use camp_hir::{
+    Binding, Generics, LangItem, Lifetime, Mutability, Predicate, TraitPredicate, Ty, TyId, TyKind,
+};
+use camp_util::{bail, IteratorExt};
 
-use crate::lang_item::LangItem;
-use crate::resolver::{ResolveContext, Resolver};
-use crate::result::LoweringError;
-use crate::{EnumId, StructId};
-use crate::{ItemId, Span, StringId, TraitId};
-
-id_type!(pub TyId);
-
-pub struct TyDecl {
-    pub parent: ItemId,
-    pub idx: usize,
-}
-
-pub enum Mutability {
-    Const,
-    Mut,
-}
-
-impl From<&ast::Mutability> for Mutability {
-    fn from(m: &ast::Mutability) -> Self {
-        match m {
-            ast::Mutability::Mut(_) => Mutability::Mut,
-            ast::Mutability::Const => Mutability::Const,
-        }
-    }
-}
-
-pub struct Ty {
-    pub id: TyId,
-    pub span: Span,
-    pub kind: TyKind,
-}
-
-pub enum TyKind {
-    Struct(StructId, Generics),
-    Enum(EnumId, Generics),
-    Tuple(Vec<Arc<Ty>>),
-    Pointer(Mutability, Arc<Ty>),
-    Reference(Lifetime, Mutability, Arc<Ty>),
-    Assoc(Arc<Ty>, Option<TraitPredicate>, StringId),
-    Array(Arc<Ty>, usize),
-    Slice(Arc<Ty>),
-    Never,
-    Infer,
-    Fn(Vec<Arc<Ty>>, Arc<Ty>),
-    Dyn(Vec<Predicate>),
-    /// Placeholder for a dyn's Self type
-    DynPlaceholder,
-}
-
-id_type!(pub LifetimeId);
-
-pub struct Lifetime {
-    name: StringId,
-    id: LifetimeId,
-}
-
-pub enum Predicate {
-    Trait(TraitPredicate),
-    TypeOutlives(Arc<Ty>, Lifetime),
-    Outlives(Lifetime, Lifetime),
-}
-
-pub struct TraitPredicate {
-    pub id: TraitId,
-    pub self_ty: Arc<Ty>,
-    pub generics: Generics,
-}
-
-pub struct Generics {
-    pub span: Span,
-    pub lifetimes: Vec<Lifetime>,
-    pub tys: Vec<Arc<Ty>>,
-    pub bindings: Vec<Binding>,
-}
-
-pub struct Binding {
-    pub name_span: Span,
-    pub name: StringId,
-    pub ty: Arc<Ty>,
-}
-
-impl Binding {
-    pub fn span(&self) -> Span {
-        self.name_span.until(self.ty.span)
-    }
-}
+use crate::{
+    path::Res,
+    resolver::{ResolveContext, Resolver},
+    LoweringError,
+};
 
 impl<T: ResolveContext> Resolver<T> {
     pub fn fresh_ty_id(&self) -> TyId {
@@ -229,12 +149,11 @@ impl<T: ResolveContext> Resolver<T> {
         let (item, mut span, mut rest) = self.resolve_path_partially(path)?;
 
         let kind = match item {
-            crate::Res::Struct(id, generics) => TyKind::Struct(id, generics),
-            crate::Res::Enum(id, generics) => TyKind::Enum(id, generics),
-            crate::Res::Mod(_)
-            | crate::Res::EnumVariant(_, _, _)
-            | crate::Res::Function(_, _)
-            | crate::Res::Trait(_, _) => bail!(LoweringError::NotAType(span, item.kind())),
+            Res::Struct(id, generics) => TyKind::Struct(id, generics),
+            Res::Enum(id, generics) => TyKind::Enum(id, generics),
+            Res::Mod(_) | Res::EnumVariant(_, _, _) | Res::Function(_, _) | Res::Trait(_, _) => {
+                bail!(LoweringError::NotAType(span, item.kind()))
+            }
         };
         let mut ty = self.record_ty(Ty { id: self.fresh_ty_id(), span, kind });
 

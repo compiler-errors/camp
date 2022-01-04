@@ -1,3 +1,8 @@
+use camp_ast::{FileId, Span};
+use camp_hir::LangItem;
+use camp_util::IntoCampError;
+use codespan_derive::IntoDiagnostic;
+
 #[derive(IntoDiagnostic, Debug, PartialEq, Eq, Clone)]
 #[file_id(FileId)]
 pub(crate) enum LoweringError {
