@@ -9,7 +9,7 @@ use camp_hir::Visibility;
 
 use crate::items::{CampsiteItems, Items, UnresolvedUse};
 pub use crate::items::{Item, ItemViz};
-pub use crate::resolve::lower_first_path_segment;
+pub use crate::resolve::resolve_first_path_segment;
 pub use crate::result::{UnspannedResolveError, UnspannedResolveResult};
 
 #[salsa::query_group(ResolveStorage)]
@@ -32,8 +32,8 @@ pub trait ResolveDb: camp_parse::ParseDb {
     #[salsa::invoke(resolve::max_visibility_for)]
     fn max_visibility_for(&self, accessor_module: ModId, accessed_module: ModId) -> Visibility;
 
-    #[salsa::invoke(resolve::lower_use)]
-    fn lower_use(&self, u: Arc<AstUse>, module: ModId) -> CampResult<UnresolvedUse>;
+    #[salsa::invoke(resolve::resolve_use)]
+    fn resolve_use(&self, u: Arc<AstUse>, module: ModId) -> CampResult<UnresolvedUse>;
 
     #[salsa::invoke(resolve::campsite_items)]
     fn campsite_items(&self, campsite_id: CampsiteId) -> CampResult<CampsiteItems>;

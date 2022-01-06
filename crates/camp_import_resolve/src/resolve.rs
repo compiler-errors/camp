@@ -33,11 +33,11 @@ pub fn max_visibility_for(
     }
 }
 
-pub fn lower_use(db: &dyn ResolveDb, u: Arc<AstUse>, module: ModId) -> CampResult<UnresolvedUse> {
+pub fn resolve_use(db: &dyn ResolveDb, u: Arc<AstUse>, module: ModId) -> CampResult<UnresolvedUse> {
     let span = u.span();
     let viz = Visibility::from(&u.viz);
     let mut segments = u.path.path.iter_items().peekable();
-    let base = lower_first_path_segment(db, module, &mut segments)?;
+    let base = resolve_first_path_segment(db, module, &mut segments)?;
 
     let mut path = vec![];
     let mut final_star: Option<&Star> = None;
@@ -80,7 +80,7 @@ pub fn lower_use(db: &dyn ResolveDb, u: Arc<AstUse>, module: ModId) -> CampResul
     })
 }
 
-pub fn lower_first_path_segment<'a, S: Iterator<Item = &'a PathSegment>>(
+pub fn resolve_first_path_segment<'a, S: Iterator<Item = &'a PathSegment>>(
     db: &(impl ResolveDb + ?Sized),
     module: ModId,
     segments: &mut std::iter::Peekable<S>,
@@ -273,7 +273,7 @@ fn populate_items(
 
     for item in &db.mod_ast(module)?.items {
         match item {
-            AstItem::Use(u) => match db.lower_use(Arc::clone(u), module)? {
+            AstItem::Use(u) => match db.resolve_use(Arc::clone(u), module)? {
                 UnresolvedUse::Glob(p) => {
                     globs.push(p);
                 }

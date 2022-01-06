@@ -12,7 +12,7 @@ use camp_hir::{
     Enum, Field, Fields, Function, GenericDecl, GenericId, Generics, Impl, Lifetime, LifetimeDecl,
     LifetimeId, Mod, Predicate, Struct, Trait, Ty, TyDecl, TyKind, Variant, Visibility,
 };
-use camp_import_resolve::lower_first_path_segment;
+use camp_import_resolve::resolve_first_path_segment;
 use camp_util::bail;
 use maplit::{btreemap, hashmap};
 
@@ -366,7 +366,7 @@ impl ResolveContext for ItemContext<'_> {
             }
         }
 
-        Ok(PartialRes::Mod(lower_first_path_segment(self.db, self.db.mod_of(self.id), segments)?))
+        Ok(PartialRes::Mod(resolve_first_path_segment(self.db, self.db.mod_of(self.id), segments)?))
     }
 
     fn fresh_infer_lifetime(&self, span: ast::Span) -> CampResult<camp_hir::Lifetime> {
