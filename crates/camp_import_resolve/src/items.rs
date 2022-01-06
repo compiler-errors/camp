@@ -1,10 +1,8 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use camp_ast::{
-    tok::Ident, CampResult, EnumId, FunctionId, ModId, Span, StructId, TraitId,
-    Visibility as AstVisibility,
-};
+use camp_ast::{tok::Ident, CampResult, EnumId, FunctionId, ModId, Span, StructId, TraitId};
+use camp_hir::Visibility;
 use camp_util::bail;
 
 use crate::result::ResolveError;
@@ -81,39 +79,3 @@ pub struct ItemPath {
 pub type CampsiteItems = Arc<BTreeMap<ModId, Items>>;
 
 pub type Items = Arc<BTreeMap<String, ItemViz>>;
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
-pub enum Visibility {
-    Public,
-    PubSite,
-    PubSuper,
-    Private,
-}
-
-impl From<&AstVisibility> for Visibility {
-    fn from(viz: &AstVisibility) -> Self {
-        use camp_ast::{VisibilityRange, VisibilityRangeKind};
-
-        match viz {
-            AstVisibility::Private => Visibility::Private,
-            AstVisibility::Pub(_, None) => Visibility::Public,
-            AstVisibility::Pub(_, Some(VisibilityRange { kind, .. })) => match kind {
-                // pub(mod) == private
-                VisibilityRangeKind::Mod(_) => Visibility::Private,
-                VisibilityRangeKind::Super(_) => Visibility::PubSuper,
-                VisibilityRangeKind::Site(_) => Visibility::PubSite,
-            },
-        }
-    }
-}
-
-impl std::fmt::Display for Visibility {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Visibility::Public => write!(f, "public"),
-            Visibility::PubSite => write!(f, "public to the campsite"),
-            Visibility::PubSuper => write!(f, "visible to super"),
-            Visibility::Private => write!(f, "private"),
-        }
-    }
-}

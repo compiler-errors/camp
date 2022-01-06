@@ -47,3 +47,14 @@ impl Parse for PathSegment {
         })
     }
 }
+
+pub fn parse_typelike_path(input: &mut ParseBuffer<'_>) -> CampResult<Path> {
+    let mut path: Path = input.parse()?;
+
+    if let Some(generics) = input.parse()? {
+        path.path.push_punct(tok::ColonColon { span: path.span().shrink_to_hi() });
+        path.path.push(PathSegment::Generics(generics));
+    }
+
+    Ok(path)
+}

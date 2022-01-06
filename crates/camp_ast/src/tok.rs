@@ -82,9 +82,9 @@ macro_rules! foreach_symbol {
 macro_rules! foreach_delimiter {
     ($macro:ident) => {
         $macro! {
-            Paren, LParen, "(", RParen, ")";
-            Curly, LCurly, "{", RCurly, "}";
-            Sq,    LSq,    "[", RSq,    "]";
+            Paren, "(", ")";
+            Curly, "{", "}";
+            Sq,    "[", "]";
         }
     };
 }
@@ -150,22 +150,22 @@ macro_rules! declare_symbols {
 }
 
 macro_rules! declare_delimiters {
-    ($($kind:ident, $LTy:ident, $left:expr, $RTy:ident, $right:expr);+ $(;)?) => {
-        $(
+    ($($kind:ident, $left:literal, $right:literal);+ $(;)?) => {
+        $(paste::paste! {
             #[derive(Copy, Clone, Hash, Eq, PartialEq, derivative::Derivative)]
             #[derivative(Debug)]
-            pub struct $LTy {
+            pub struct [<L $kind>] {
                 #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
                 pub span: Span,
             }
 
             #[derive(Copy, Clone, Hash, Eq, PartialEq, derivative::Derivative)]
             #[derivative(Debug)]
-            pub struct $RTy {
+            pub struct [<R $kind>] {
                 #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
                 pub span: Span,
             }
-        )*
+        })*
     }
 }
 

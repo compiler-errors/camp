@@ -92,6 +92,14 @@ pub(crate) enum ResolveError {
         expected: &'static str,
         found: &'static str,
     },
+
+    #[message = "Unexpected associated type `{name}` in module"]
+    #[note = "Associated types are only allowed in impls and traits"]
+    UnexpectedAssoc {
+        #[primary]
+        span: Span,
+        name: String,
+    },
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]

@@ -74,9 +74,9 @@ macro_rules! declare_symbols {
 }
 
 macro_rules! declare_delimiters {
-    ($($kind:ident, $LTy:ident, $left:expr, $RTy:ident, $right:expr);+ $(;)?) => {
-        $(
-            impl Peek for $LTy {
+    ($($kind:ident, $left:literal, $right:literal);+ $(;)?) => {
+        $(paste::paste!{
+            impl Peek for [<L $kind>] {
                 fn peek(input: &ParseBuffer<'_>) -> bool {
                     matches!(
                         input.peek_tok(),
@@ -92,7 +92,7 @@ macro_rules! declare_delimiters {
                 }
             }
 
-            impl Peek for $RTy {
+            impl Peek for [<R $kind>] {
                 fn peek(input: &ParseBuffer<'_>) -> bool {
                     matches!(
                         input.peek_tok(),
@@ -107,7 +107,7 @@ macro_rules! declare_delimiters {
                     $right
                 }
             }
-        )*
+        })*
     }
 }
 

@@ -4,15 +4,16 @@ mod result;
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
+use camp_ast_lower::{HirDb, HirStorage};
 pub use camp_files::CampsiteArg;
 use camp_files::{CampResult, FilesDb, FilesStorage};
-use camp_import_resolve::{ResolveDb, ResolveStorage};
+use camp_import_resolve::ResolveStorage;
 use camp_lex::lex;
 use camp_parse::{ParseDb, ParseStorage};
 
 pub use crate::result::DriverError;
 
-#[salsa::database(ParseStorage, FilesStorage, ResolveStorage)]
+#[salsa::database(ParseStorage, FilesStorage, ResolveStorage, HirStorage)]
 #[derive(Default)]
 pub struct CampDb {
     storage: salsa::Storage<Self>,
@@ -55,7 +56,7 @@ pub fn verify_stage(
 
     let root_id =
         db.campsite_by_name(root_name)?.expect("Expected root campsite to exist, since we set it");
-    let root_items = db.campsite_items(root_id)?;
+    let root_items = db.campsite_hir(root_id)?;
 
     println!("{:#?}", root_items);
 

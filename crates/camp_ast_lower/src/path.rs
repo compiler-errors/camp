@@ -6,6 +6,7 @@ use camp_ast::{
     self as ast, CampResult, EnumId, FunctionId, ItemId, ModId, PathSegment, Span, StructId,
     TraitId,
 };
+use camp_hir::{GenericId, TyKind};
 use camp_import_resolve::Item;
 use camp_util::{bail, IteratorExt};
 use maplit::{btreemap, hashmap};
@@ -21,6 +22,7 @@ pub enum PartialRes {
     EnumVariant(EnumId, Option<Generics>, StringId),
     Function(FunctionId, Option<Generics>),
     Trait(TraitId, Option<Generics>),
+    GenericTy(GenericId),
     // Variable
 }
 
@@ -33,6 +35,7 @@ impl PartialRes {
             PartialRes::EnumVariant(..) => "enum variant",
             PartialRes::Function(..) => "function",
             PartialRes::Trait(..) => "trait",
+            PartialRes::GenericTy(..) => "type generic",
         }
     }
 }
@@ -44,6 +47,7 @@ pub enum Res {
     EnumVariant(EnumId, Generics, StringId),
     Function(FunctionId, Generics),
     Trait(TraitId, Generics),
+    Generic(GenericId),
     // Variable
 }
 
@@ -56,6 +60,7 @@ impl Res {
             Res::EnumVariant(..) => "enum variant",
             Res::Function(..) => "function",
             Res::Trait(..) => "trait",
+            Res::Generic(..) => "type generic",
         }
     }
 
@@ -138,6 +143,7 @@ impl<T: ResolveContext> Resolver<T> {
 
         let res = match res {
             PartialRes::Mod(m) => Res::Mod(m),
+            PartialRes::GenericTy(g) => Res::Generic(g),
             PartialRes::Struct(id, g) => Res::Struct(
                 id,
                 g.map(Ok).unwrap_or_else(|| self.fill_missing_generics(id, consumed_span))?,
@@ -193,27 +199,27 @@ impl<T: ResolveContext> Resolver<T> {
                         bail!(LoweringError::MustPrecede {
                             this: "lifetime generic",
                             other: "type generic",
-                            this_span: ty.span,
-                            other_span: lt.span,
+                            this_span: lt.span,
+                            other_span: ty.span,
                         });
                     }
                     if let Some(binding) = bindings.first() {
                         bail!(LoweringError::MustPrecede {
                             this: "lifetime generic",
                             other: "associated type binding",
-                            this_span: binding.span(),
-                            other_span: lt.span,
+                            this_span: lt.span,
+                            other_span: binding.span(),
                         });
                     }
-                    lifetimes.push(self.resolve_lifetime(lt)?);
+                    lifetimes.push(self.rcx.resolve_lifetime(lt)?);
                 }
                 ast::Generic::Ty(ty) => {
                     if let Some(binding) = bindings.first() {
                         bail!(LoweringError::MustPrecede {
                             this: "type generic",
                             other: "associated type binding",
-                            this_span: binding.span(),
-                            other_span: ty.span(),
+                            this_span: ty.span(),
+                            other_span: binding.span(),
                         });
                     }
                     tys.push(self.resolve_ty(ty)?);
@@ -258,6 +264,11 @@ impl<T: ResolveContext> Resolver<T> {
             PartialRes::EnumVariant(id, _, name) => bail!(LoweringError::UnexpectedGenerics {
                 what: "enum variant",
                 name: format!("{}::{}", self.db().item_name(id.into())?, name),
+                span: lowered.span,
+            }),
+            PartialRes::GenericTy(id) => bail!(LoweringError::UnexpectedGenerics {
+                what: "enum variant",
+                name: self.rcx.generic_name(id),
                 span: lowered.span,
             }),
             PartialRes::Struct(_, Some(substs))
@@ -308,13 +319,16 @@ impl<T: ResolveContext> Resolver<T> {
     }
 
     pub fn fill_missing_generics(&self, id: impl Into<ItemId>, span: Span) -> CampResult<Generics> {
-        let (lifetimes, types, _) = self.db().generics_count(id.into())?;
+        let (n_lt, n_ty, _) = self.db().generics_count(id.into())?;
 
-        Ok(Generics {
-            span,
-            lifetimes: (0..lifetimes).map(|_| self.fresh_infer_lifetime(span)).try_collect_vec()?,
-            tys: (0..types).map(|_| self.fresh_infer_ty(span)).try_collect_vec()?,
-            bindings: vec![],
-        })
+        let lifetimes = (0..n_lt).map(|_| self.rcx.fresh_infer_lifetime(span)).try_collect_vec()?;
+        let tys = (0..n_ty)
+            .map(|_| -> CampResult<_> {
+                self.rcx.check_infer_allowed(span)?;
+                Ok(self.rcx.record_ty(TyKind::Infer, span))
+            })
+            .try_collect_vec()?;
+
+        Ok(Generics { span, lifetimes, tys, bindings: vec![] })
     }
 }

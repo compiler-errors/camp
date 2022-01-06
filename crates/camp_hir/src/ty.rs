@@ -3,15 +3,17 @@ use std::sync::Arc;
 use camp_ast as ast;
 use camp_util::id_type;
 
-use crate::{EnumId, ItemId, Span, StringId, StructId, TraitId};
+use crate::{EnumId, GenericId, ItemId, LifetimeId, Span, StringId, StructId, TraitId};
 
 id_type!(pub TyId);
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct TyDecl {
     pub parent: ItemId,
     pub idx: usize,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Mutability {
     Const,
     Mut,
@@ -26,12 +28,20 @@ impl From<&ast::Mutability> for Mutability {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Lifetime {
+    pub id: LifetimeId,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Ty {
     pub id: TyId,
     pub span: Span,
     pub kind: TyKind,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TyKind {
     Struct(StructId, Generics),
     Enum(EnumId, Generics),
@@ -47,27 +57,24 @@ pub enum TyKind {
     Dyn(Vec<Predicate>),
     /// Placeholder for a dyn's Self type
     DynPlaceholder,
+    Generic(GenericId),
 }
 
-id_type!(pub LifetimeId);
-
-pub struct Lifetime {
-    name: StringId,
-    id: LifetimeId,
-}
-
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Predicate {
     Trait(TraitPredicate),
     TypeOutlives(Arc<Ty>, Lifetime),
     Outlives(Lifetime, Lifetime),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TraitPredicate {
     pub id: TraitId,
     pub self_ty: Arc<Ty>,
     pub generics: Generics,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Generics {
     pub span: Span,
     pub lifetimes: Vec<Lifetime>,
@@ -75,6 +82,7 @@ pub struct Generics {
     pub bindings: Vec<Binding>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Binding {
     pub name_span: Span,
     pub name: StringId,

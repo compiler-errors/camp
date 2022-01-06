@@ -21,18 +21,18 @@ pub struct ParseBuffer<'p> {
 }
 
 macro_rules! between_fns {
-    ($($kind:ident, $LTy:ident, $left:expr, $RTy:ident, $right:expr);+ $(;)?) => {$(
-        paste::paste! {
-            pub fn [<parse_between_ $kind:lower s>](&mut self) -> CampResult<($LTy, ParseBuffer<'p>, $RTy)> {
+    ($($kind:ident, $left:literal, $right:literal);+ $(;)?) => {
+        $(paste::paste! {
+            pub fn [<parse_between_ $kind:lower s>](&mut self) -> CampResult<([<L $kind>], ParseBuffer<'p>, [<R $kind>])> {
                 let left_tok = if let Some(lex::Token::BeginDelim(lex::TokenBeginDelim {
                     delimiter: lex::TokenDelim::$kind,
                     span,
                 })) = self.peek_tok()
                 {
                     self.bump_tok().expect("Expected a token because it was peeked");
-                    $LTy { span: *span }
+                    [<L $kind>] { span: *span }
                 } else {
-                    self.also_expect::<$LTy>();
+                    self.also_expect::<[<L $kind>]>();
                     self.error_exhausted()?;
                 };
 
@@ -47,7 +47,7 @@ macro_rules! between_fns {
                             span,
                         })) => {
                             if count == 0 {
-                                let right_tok = $RTy { span: *span };
+                                let right_tok = [<R $kind>] { span: *span };
                                 let contents =
                                     ParseBuffer::new_from_parts(self.db, &tokens[0..scanned], *span);
                                 return Ok((left_tok, contents, right_tok));
@@ -68,8 +68,8 @@ macro_rules! between_fns {
                     scanned += 1;
                 }
             }
-        }
-    )*};
+        })*
+    };
 }
 
 impl<'p> ParseBuffer<'p> {

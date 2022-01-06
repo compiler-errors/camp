@@ -7,6 +7,7 @@ edition = "2021"
 camino = "1.0.5"
 camp_files = { path = "../camp_files" }
 camp_hir = { path = "../camp_hir" }
+camp_ast_lower = { path = "../camp_ast_lower" }
 camp_import_resolve = { path = "../camp_import_resolve" }
 camp_lex = { path = "../camp_lex" }
 camp_parse = { path = "../camp_parse" }

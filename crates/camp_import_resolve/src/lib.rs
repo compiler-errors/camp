@@ -5,9 +5,10 @@ mod result;
 use std::sync::Arc;
 
 use camp_ast::{CampResult, CampsiteId, EnumId, ModId, Use as AstUse};
+use camp_hir::Visibility;
 
 use crate::items::{CampsiteItems, Items, UnresolvedUse};
-pub use crate::items::{Item, ItemViz, Visibility};
+pub use crate::items::{Item, ItemViz};
 pub use crate::resolve::lower_first_path_segment;
 pub use crate::result::{UnspannedResolveError, UnspannedResolveResult};
 

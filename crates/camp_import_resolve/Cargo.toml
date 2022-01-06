@@ -7,6 +7,7 @@ edition = "2018"
 camp_ast = { path = "../camp_ast" }
 camp_parse = { path = "../camp_parse" }
 camp_util = { path = "../camp_util" }
+camp_hir = { path = "../camp_hir" }
 codespan-derive = "0.1.1"
 codespan-reporting = "0.11.1"
 maplit = "1.0.2"

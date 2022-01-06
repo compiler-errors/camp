@@ -73,6 +73,7 @@ dependencies = [
  "camp_util",
  "codespan-derive",
  "derivative",
+ "paste",
  "salsa",
 ]
 
@@ -95,6 +96,7 @@ name = "camp_driver"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "camp_ast_lower",
  "camp_files",
  "camp_hir",
  "camp_import_resolve",
@@ -135,6 +137,7 @@ name = "camp_import_resolve"
 version = "0.1.0"
 dependencies = [
  "camp_ast",
+ "camp_hir",
  "camp_parse",
  "camp_util",
  "codespan-derive",

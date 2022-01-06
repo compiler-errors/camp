@@ -7,6 +7,7 @@ use camp_ast::{
 };
 
 use crate::{
+    parse_typelike_path,
     parser::{Parse, ParseBuffer, ShouldParse},
     CampResult,
 };
@@ -33,7 +34,7 @@ fn ty_non_assoc(input: &mut ParseBuffer<'_>) -> CampResult<Ty> {
     } else if input.peek::<tok::CSelf>() {
         Ty::SelfTy(input.parse()?)
     } else {
-        Ty::Path(input.parse()?)
+        Ty::Path(parse_typelike_path(input)?)
     })
 }
 
@@ -249,7 +250,7 @@ impl Parse for TraitTy {
         if input.peek::<tok::CFn>() || input.peek::<tok::CFnMut>() || input.peek::<tok::CFnOnce>() {
             Ok(TraitTy::Fn(input.parse()?))
         } else {
-            Ok(TraitTy::Path(input.parse()?))
+            Ok(TraitTy::Path(parse_typelike_path(input)?))
         }
     }
 }

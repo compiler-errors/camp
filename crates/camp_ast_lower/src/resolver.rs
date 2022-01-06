@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use camp_ast::Span;
 use camp_ast::{self as ast, CampResult};
-use camp_hir::{Lifetime, Ty, TyId, TyKind};
+use camp_hir::{GenericId, Generics, Lifetime, Ty, TyId, TyKind};
 use camp_import_resolve::Item;
 use camp_util::bail;
 
@@ -19,27 +19,29 @@ pub struct Resolver<T: ResolveContext> {
 pub trait ResolveContext {
     fn db(&self) -> &dyn HirDb;
 
-    fn fresh_ty_id(&self) -> TyId;
+    fn record_ty(&self, kind: TyKind, span: Span) -> Arc<Ty>;
 
-    fn record_ty(&self, ty: Ty) -> Arc<Ty>;
+    fn self_ty_kind(&self, span: Span) -> CampResult<TyKind>;
 
-    fn module(&self, id: &ast::Ident) -> CampResult<Item>;
+    fn check_infer_allowed(&self, span: Span) -> CampResult<()>;
 
     fn resolve_first_path_segment<'a, S: Iterator<Item = &'a ast::PathSegment>>(
         &self,
         segments: &mut Peekable<S>,
     ) -> CampResult<PartialRes>;
 
-    fn self_ty_kind(&self) -> CampResult<TyKind>;
-
     fn fresh_infer_lifetime(&self, span: Span) -> CampResult<Lifetime>;
 
     fn resolve_lifetime(&self, l: &ast::Lifetime) -> CampResult<Lifetime>;
 
-    fn fresh_infer_ty(&self, span: Span) -> CampResult<Arc<Ty>>;
+    fn generic_name(&self, g: GenericId) -> String;
 }
 
 impl<T: ResolveContext> Resolver<T> {
+    pub fn new(rcx: T) -> Self {
+        Resolver { rcx }
+    }
+
     pub fn db(&self) -> &dyn HirDb {
         self.rcx.db()
     }

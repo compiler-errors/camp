@@ -1,0 +1,12 @@
+{
+    "rust-analyzer.checkOnSave.overrideCommand": [
+        "cargo",
+        "check",
+        "--workspace",
+        "--message-format",
+        "json"
+    ],
+    "editor.formatOnSave": true,
+    "rust-analyzer.cargo.runBuildScripts": true,
+    "rust-analyzer.procMacro.enable": true
+}

@@ -18,9 +18,8 @@ use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 use camp_ast::{
-    CampResult, CampsiteId, Enum, EnumId, FileId, Function, FunctionId, Impl, ImplId, ImplItemDecl,
-    ImplItemId, ItemDecl, ItemId, Mod, ModDecl, ModId, ModuleItem, Struct, StructId, Trait,
-    TraitId, TraitItemDecl, TraitItemId,
+    CampResult, CampsiteId, Enum, EnumId, FileId, Function, FunctionId, Impl, ImplId, Item,
+    ItemDecl, ItemId, ItemParent, Mod, ModDecl, ModId, Struct, StructId, Trait, TraitId,
 };
 use camp_util::bail;
 
@@ -42,7 +41,7 @@ pub trait ParseDb: camp_files::FilesDb {
 
     fn mod_ast(&self, id: ModId) -> CampResult<Arc<Mod>>;
 
-    fn item_ast(&self, id: ItemId) -> CampResult<ModuleItem>;
+    fn item_ast(&self, id: ItemId) -> CampResult<Item>;
 
     fn struct_ast(&self, id: StructId) -> CampResult<Arc<Struct>>;
 
@@ -58,7 +57,9 @@ pub trait ParseDb: camp_files::FilesDb {
     fn campsite_of(&self, module: ModId) -> CampsiteId;
 
     /// Lookup id of the parent module, if it isn't a campsite root
-    fn parent_of(&self, module: ModId) -> Option<ModId>;
+    fn parent_of_mod(&self, module: ModId) -> Option<ModId>;
+
+    fn parent_of(&self, item: ItemId) -> ItemParent;
 
     /// Lookup id of the module that contains the given item
     fn mod_of(&self, item: ItemId) -> ModId;
@@ -87,12 +88,6 @@ pub trait ParseDb: camp_files::FilesDb {
 
     #[salsa::interned]
     fn item_decl(&self, decl: ItemDecl) -> ItemId;
-
-    #[salsa::interned]
-    fn trait_decl(&self, decl: TraitItemDecl) -> TraitItemId;
-
-    #[salsa::interned]
-    fn impl_decl(&self, decl: ImplItemDecl) -> ImplItemId;
 }
 
 fn campsite_root_mod_id(db: &dyn ParseDb, id: CampsiteId) -> ModId {
@@ -107,7 +102,7 @@ fn mod_file(db: &dyn ParseDb, id: ModId) -> CampResult<FileId> {
     match db.lookup_mod_decl(id) {
         ModDecl::CampsiteRoot(id) => Ok(db.campsite_root_file_id(id)),
         ModDecl::Submod(decl) => {
-            let parent_mod_id = db.lookup_item_decl(decl.id).mod_id;
+            let parent_mod_id = db.mod_of(decl.id);
             let parent_directory = db.submod_directory(parent_mod_id)?;
 
             let mut mod_file = parent_directory.clone();
@@ -156,7 +151,7 @@ fn submod_directory(db: &dyn ParseDb, id: ModId) -> CampResult<Utf8PathBuf> {
             }
         }
         ModDecl::Submod(decl) => {
-            let parent_mod_id = db.lookup_item_decl(decl.id).mod_id;
+            let parent_mod_id = db.mod_of(decl.id);
 
             // Append our module name to the parent directory
             let mut directory = db.submod_directory(parent_mod_id)?;
@@ -175,7 +170,7 @@ fn mod_ast(db: &dyn ParseDb, id: ModId) -> CampResult<Arc<Mod>> {
     match db.lookup_mod_decl(id) {
         ModDecl::CampsiteRoot(id) => db.campsite_ast(id),
         ModDecl::Submod(decl) => {
-            if let ModuleItem::Mod(ast) = db.item_ast(decl.id)? {
+            if let Item::Mod(ast) = db.item_ast(decl.id)? {
                 Ok(ast)
             } else {
                 unreachable!()
@@ -184,44 +179,63 @@ fn mod_ast(db: &dyn ParseDb, id: ModId) -> CampResult<Arc<Mod>> {
     }
 }
 
-fn item_ast(db: &dyn ParseDb, id: ItemId) -> CampResult<ModuleItem> {
-    let decl = db.lookup_item_decl(id);
-    let module = db.mod_ast(decl.mod_id)?;
-    Ok(module.items[decl.idx].clone())
+fn item_ast(db: &dyn ParseDb, id: ItemId) -> CampResult<Item> {
+    match db.lookup_item_decl(id) {
+        ItemDecl { parent: ItemParent::Mod(mod_id), idx } => {
+            let module = db.mod_ast(mod_id)?;
+            Ok(module.items[idx].clone())
+        }
+        ItemDecl { parent: ItemParent::Trait(trait_id), idx } => {
+            let module = db.trait_ast(trait_id)?;
+            Ok(module.items[idx].clone())
+        }
+        ItemDecl { parent: ItemParent::Impl(impl_id), idx } => {
+            let module = db.impl_ast(impl_id)?;
+            Ok(module.items[idx].clone())
+        }
+    }
 }
 
 fn struct_ast(db: &dyn ParseDb, id: StructId) -> CampResult<Arc<Struct>> {
-    if let ModuleItem::Struct(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
+    if let Item::Struct(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
 }
 
 fn enum_ast(db: &dyn ParseDb, id: EnumId) -> CampResult<Arc<Enum>> {
-    if let ModuleItem::Enum(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
+    if let Item::Enum(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
 }
 
 fn fn_ast(db: &dyn ParseDb, id: FunctionId) -> CampResult<Arc<Function>> {
-    if let ModuleItem::Function(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
+    if let Item::Function(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
 }
 
 fn trait_ast(db: &dyn ParseDb, id: TraitId) -> CampResult<Arc<Trait>> {
-    if let ModuleItem::Trait(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
+    if let Item::Trait(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
 }
 
 fn impl_ast(db: &dyn ParseDb, id: ImplId) -> CampResult<Arc<Impl>> {
-    if let ModuleItem::Impl(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
+    if let Item::Impl(ast) = db.item_ast(id.into())? { Ok(ast) } else { unreachable!() }
 }
 
 fn campsite_of(db: &dyn ParseDb, module: ModId) -> CampsiteId {
     match db.lookup_mod_decl(module) {
         ModDecl::CampsiteRoot(campsite) => campsite,
-        ModDecl::Submod(decl) => db.campsite_of(db.lookup_item_decl(decl.id).mod_id),
+        ModDecl::Submod(decl) => db.campsite_of(db.mod_of(decl.id)),
     }
 }
 
 fn mod_of(db: &dyn ParseDb, id: ItemId) -> ModId {
-    db.lookup_item_decl(id).mod_id
+    match db.parent_of(id) {
+        ItemParent::Mod(m) => m,
+        ItemParent::Trait(t) => db.mod_of(t.into()),
+        ItemParent::Impl(i) => db.mod_of(i.into()),
+    }
 }
 
-fn parent_of(db: &dyn ParseDb, module: ModId) -> Option<ModId> {
+fn parent_of(db: &dyn ParseDb, id: ItemId) -> ItemParent {
+    db.lookup_item_decl(id).parent
+}
+
+fn parent_of_mod(db: &dyn ParseDb, module: ModId) -> Option<ModId> {
     match db.lookup_mod_decl(module) {
         ModDecl::CampsiteRoot(_) => None,
         ModDecl::Submod(decl) => Some(db.mod_of(decl.id)),
@@ -231,7 +245,7 @@ fn parent_of(db: &dyn ParseDb, module: ModId) -> Option<ModId> {
 fn is_ancestor_of(db: &dyn ParseDb, ancestor: ModId, module: ModId) -> bool {
     if ancestor == module {
         true
-    } else if let Some(parent) = db.parent_of(module) {
+    } else if let Some(parent) = db.parent_of_mod(module) {
         db.is_ancestor_of(ancestor, parent)
     } else {
         false
@@ -247,27 +261,29 @@ fn mod_name(db: &dyn ParseDb, module: ModId) -> String {
 
 fn item_name(db: &dyn ParseDb, id: ItemId) -> CampResult<String> {
     Ok(match db.item_ast(id)? {
-        ModuleItem::Mod(m) => db.mod_name(m.id),
-        ModuleItem::Extern(e) => e.name.ident.to_owned(),
-        ModuleItem::Struct(s) => s.ident.ident.to_owned(),
-        ModuleItem::Enum(e) => e.ident.ident.to_owned(),
-        ModuleItem::Function(f) => f.sig.ident.ident.to_owned(),
-        ModuleItem::Trait(t) => t.ident.ident.to_owned(),
-        ModuleItem::Use(_) => unreachable!(),
-        ModuleItem::Impl(_) => unreachable!(),
+        Item::Mod(m) => db.mod_name(m.id),
+        Item::Extern(e) => e.name.ident.to_owned(),
+        Item::Struct(s) => s.ident.ident.to_owned(),
+        Item::Enum(e) => e.ident.ident.to_owned(),
+        Item::Function(f) => f.sig.ident.ident.to_owned(),
+        Item::Trait(t) => t.ident.ident.to_owned(),
+        Item::Assoc(a) => a.ident.ident.to_owned(),
+        Item::Use(_) => unreachable!(),
+        Item::Impl(_) => unreachable!(),
     })
 }
 
 fn item_kind(db: &dyn ParseDb, id: ItemId) -> CampResult<&'static str> {
     Ok(match db.item_ast(id)? {
-        ModuleItem::Mod(_) => "module",
-        ModuleItem::Extern(_) => "extern",
-        ModuleItem::Use(_) => "use",
-        ModuleItem::Struct(_) => "struct",
-        ModuleItem::Enum(_) => "enum",
-        ModuleItem::Function(_) => "function",
-        ModuleItem::Trait(_) => "trait",
-        ModuleItem::Impl(_) => "impl",
+        Item::Mod(_) => "module",
+        Item::Extern(_) => "extern",
+        Item::Use(_) => "use",
+        Item::Struct(_) => "struct",
+        Item::Enum(_) => "enum",
+        Item::Function(_) => "function",
+        Item::Trait(_) => "trait",
+        Item::Impl(_) => "impl",
+        Item::Assoc(_) => "associated type",
     })
 }
 

@@ -1,0 +1,6 @@
+struct Foo<T> {
+    bar: T,
+    other: Other<T, ()>,
+}
+
+struct Other<T, S>(T, S);

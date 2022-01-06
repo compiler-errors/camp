@@ -24,11 +24,11 @@ pub(crate) enum LoweringError {
         inner: Span,
     },
 
-    #[message = "associated type `{name}` not allowed to be specified here"]
-    DenyAssociated {
+    #[message = "{what} not allowed here"]
+    Deny {
+        what: &'static str,
         #[primary]
         span: Span,
-        name: String,
     },
 
     #[message = "language item `{1}` is undefined"]
@@ -100,7 +100,7 @@ pub(crate) enum LoweringError {
         span: Span,
     },
 
-    #[message = "Unexpected associated type binding `{binding_name}` on {what} `{name}`"]
+    #[message = "unexpected associated type binding `{binding_name}` on {what} `{name}`"]
     UnexpectedBinding {
         what: &'static str,
         name: String,
@@ -112,6 +112,20 @@ pub(crate) enum LoweringError {
     #[message = "{1} is not a type name"]
     #[note = "expected a struct or an enum"]
     NotAType(#[primary] Span, &'static str),
+
+    #[message = "lifetime must be named here"]
+    MustNameLifetime(#[primary = "add a `'named` lifetime here"] Span),
+
+    #[message = "lifetime `'{name}` not found"]
+    MissingLifetime {
+        #[primary]
+        span: Span,
+        name: String,
+    },
+
+    #[message = "lifetime can only outlive other lifetime"]
+    #[note = "this is a trait, not a lifetime"]
+    InvalidLifetimeBound(#[primary] Span),
 }
 
 impl IntoCampError for LoweringError {

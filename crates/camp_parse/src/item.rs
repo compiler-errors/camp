@@ -46,7 +46,7 @@ impl Parse for Mod {
         let mut items = vec![];
 
         while !input.is_empty() {
-            let decl = ItemDecl { mod_id: ctx, idx: items.len() };
+            let decl = ItemDecl { parent: ItemParent::Mod(ctx), idx: items.len() };
             let id = input.db.item_decl(decl);
 
             items.push(input.parse_with(id)?);
@@ -56,7 +56,7 @@ impl Parse for Mod {
     }
 }
 
-impl Parse for ModuleItem {
+impl Parse for Item {
     type Context = ItemId;
 
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: ItemId) -> CampResult<Self> {
@@ -75,27 +75,27 @@ impl Parse for ModuleItem {
                 let m = contents.parse_with(id)?;
                 contents.expect_empty(rcurly_tok)?;
 
-                ModuleItem::Mod(m)
+                Item::Mod(m)
             } else if input.peek::<tok::Semicolon>() {
                 let _semi: tok::Semicolon = input.parse()?;
-                ModuleItem::Mod(input.db.mod_ast_from_file(id)?)
+                Item::Mod(input.db.mod_ast_from_file(id)?)
             } else {
                 lookahead.error_exhausted()?;
             }
         } else if lookahead.peek::<tok::Extern>() {
-            ModuleItem::Extern(input.parse_with(ctx.into())?)
+            Item::Extern(input.parse_with(ctx.into())?)
         } else if lookahead.peek::<tok::Struct>() {
-            ModuleItem::Struct(input.parse_with(ctx.into())?)
+            Item::Struct(input.parse_with(ctx.into())?)
         } else if lookahead.peek::<tok::Use>() {
-            ModuleItem::Use(input.parse_with(ctx.into())?)
+            Item::Use(input.parse_with(ctx.into())?)
         } else if lookahead.peek::<tok::Enum>() {
-            ModuleItem::Enum(input.parse_with(ctx.into())?)
+            Item::Enum(input.parse_with(ctx.into())?)
         } else if lookahead.peek::<tok::Fn>() {
-            ModuleItem::Function(input.parse_with(ctx.into())?)
+            Item::Function(input.parse_with(ctx.into())?)
         } else if lookahead.peek::<tok::Trait>() {
-            ModuleItem::Trait(input.parse_with(ctx.into())?)
+            Item::Trait(input.parse_with(ctx.into())?)
         } else if lookahead.peek::<tok::Impl>() {
-            ModuleItem::Impl(input.parse_with(ctx.into())?)
+            Item::Impl(input.parse_with(ctx.into())?)
         } else {
             lookahead.error_exhausted()?;
         })
@@ -461,13 +461,13 @@ impl Parse for Trait {
         let where_clause = input.parse()?;
 
         let (lcurly_tok, mut contents, rcurly_tok) = input.parse_between_curlys()?;
-        let mut trait_items = vec![];
+        let mut items = vec![];
 
         while !contents.is_empty() {
-            let decl = TraitItemDecl { trait_id: ctx, idx: trait_items.len() };
-            let id = input.db.trait_decl(decl);
+            let decl = ItemDecl { parent: ItemParent::Trait(ctx), idx: items.len() };
+            let id = input.db.item_decl(decl);
 
-            trait_items.push(contents.parse_with(id)?);
+            items.push(contents.parse_with(id)?);
         }
 
         contents.expect_empty(rcurly_tok)?;
@@ -482,50 +482,8 @@ impl Parse for Trait {
             supertraits,
             where_clause,
             lcurly_tok,
-            trait_items,
+            items,
             rcurly_tok,
-        })
-    }
-}
-
-impl Parse for TraitItem {
-    type Context = TraitItemId;
-
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: TraitItemId) -> CampResult<Self> {
-        do_not_expect_visibility(input)?;
-
-        Ok(if input.peek::<tok::Fn>() {
-            TraitItem::Fn(input.parse_with(ctx.into())?)
-        } else if input.peek::<tok::Type>() {
-            TraitItem::Type(input.parse_with(ctx.into())?)
-        } else {
-            input.error_exhausted()?;
-        })
-    }
-}
-
-impl Parse for TraitFunction {
-    type Context = TraitFnId;
-
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: TraitFnId) -> CampResult<Self> {
-        Ok(TraitFunction {
-            id: ctx,
-            signature: input.parse_with(ParseAttrs(false))?,
-            semi_tok: input.parse()?,
-        })
-    }
-}
-
-impl Parse for TraitType {
-    type Context = TraitTypeId;
-
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: TraitTypeId) -> CampResult<Self> {
-        Ok(TraitType {
-            id: ctx,
-            type_tok: input.parse()?,
-            ident: input.parse()?,
-            supertraits: input.parse()?,
-            semi_tok: input.parse()?,
         })
     }
 }
@@ -558,14 +516,15 @@ impl Parse for Impl {
             ty = ty_or_trait;
         }
 
+        let where_clause: Option<WhereClause> = input.parse()?;
         let (lcurly_tok, mut contents, rcurly_tok) = input.parse_between_curlys()?;
-        let mut impl_items = vec![];
+        let mut items = vec![];
 
         while !contents.is_empty() {
-            let decl = ImplItemDecl { impl_id: ctx, idx: impl_items.len() };
-            let id = input.db.impl_decl(decl);
+            let decl = ItemDecl { parent: ItemParent::Impl(ctx), idx: items.len() };
+            let id = input.db.item_decl(decl);
 
-            impl_items.push(contents.parse_with(id)?);
+            items.push(contents.parse_with(id)?);
         }
 
         contents.expect_empty(rcurly_tok)?;
@@ -577,53 +536,10 @@ impl Parse for Impl {
             generics,
             impl_trait,
             ty,
+            where_clause,
             lcurly_tok,
-            impl_items,
+            items,
             rcurly_tok,
-        })
-    }
-}
-
-impl Parse for ImplItem {
-    type Context = ImplItemId;
-
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ImplItemId) -> CampResult<Self> {
-        let mut lookahead = input.clone();
-        let _viz: Visibility = lookahead.parse()?;
-
-        Ok(if lookahead.peek::<tok::Fn>() {
-            ImplItem::Function(input.parse_with(ctx.into())?)
-        } else if lookahead.peek::<tok::Type>() {
-            ImplItem::Type(input.parse_with(ctx.into())?)
-        } else {
-            input.error_exhausted()?;
-        })
-    }
-}
-
-impl Parse for ImplFunction {
-    type Context = ImplFnId;
-
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ImplFnId) -> CampResult<Self> {
-        Ok(ImplFunction {
-            id: ctx,
-            signature: input.parse_with(ParseAttrs(false))?,
-            body: expr_block(input, ExprContext::any_expr())?,
-        })
-    }
-}
-
-impl Parse for ImplType {
-    type Context = ImplTypeId;
-
-    fn parse_with(input: &mut ParseBuffer<'_>, ctx: ImplTypeId) -> CampResult<Self> {
-        Ok(ImplType {
-            id: ctx,
-            type_tok: input.parse()?,
-            ident: input.parse()?,
-            eq_tok: input.parse()?,
-            ty: input.parse()?,
-            semi_tok: input.parse()?,
         })
     }
 }

@@ -6,7 +6,7 @@ use camp_ast::{
 use camp_util::bail;
 
 use crate::parser::{Parse, ParseBuffer, ShouldParse};
-use crate::{CampResult, ParseError};
+use crate::{parse_typelike_path, CampResult, ParseError};
 
 impl Parse for Pat {
     type Context = ();
@@ -68,7 +68,7 @@ fn pat_simple(input: &mut ParseBuffer<'_>) -> CampResult<Pat> {
 
 fn pat_ident(input: &mut ParseBuffer<'_>) -> CampResult<Pat> {
     let mut_tok = input.parse()?;
-    let path = input.parse()?;
+    let path = parse_typelike_path(input)?;
     let fields = input.parse()?;
 
     Ok(if matches!(fields, PatFields::None) {

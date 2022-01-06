@@ -3,8 +3,8 @@ use std::iter::Peekable;
 use std::sync::Arc;
 
 use camp_ast::{
-    tok::Star, CampResult, CampsiteId, EnumId, ModDecl, ModId, ModuleItem as AstItem, Path,
-    PathSegment, Span, Use as AstUse,
+    tok::Star, CampResult, CampsiteId, EnumId, Item as AstItem, ModDecl, ModId, Path, PathSegment,
+    Span, Use as AstUse,
 };
 use camp_util::bail;
 use maplit::btreemap;
@@ -22,7 +22,7 @@ pub fn max_visibility_for(
     if db.is_ancestor_of(accessed_module, accessor_module) {
         Visibility::Private
     } else if db
-        .parent_of(accessed_module)
+        .parent_of_mod(accessed_module)
         .map_or(false, |parent| db.is_ancestor_of(parent, accessor_module))
     {
         Visibility::PubSuper
@@ -36,7 +36,8 @@ pub fn max_visibility_for(
 pub fn lower_use(db: &dyn ResolveDb, u: Arc<AstUse>, module: ModId) -> CampResult<UnresolvedUse> {
     let span = u.span();
     let viz = Visibility::from(&u.viz);
-    let (base, segments) = lower_first_path_segment(db, module, &u.path)?;
+    let mut segments = u.path.path.iter_items().peekable();
+    let base = lower_first_path_segment(db, module, &mut segments)?;
 
     let mut path = vec![];
     let mut final_star: Option<&Star> = None;
@@ -79,13 +80,11 @@ pub fn lower_use(db: &dyn ResolveDb, u: Arc<AstUse>, module: ModId) -> CampResul
     })
 }
 
-pub fn lower_first_path_segment<'a>(
-    db: &dyn ResolveDb,
+pub fn lower_first_path_segment<'a, S: Iterator<Item = &'a PathSegment>>(
+    db: &(impl ResolveDb + ?Sized),
     module: ModId,
-    path: &'a Path,
-) -> CampResult<(ModId, Peekable<impl Iterator<Item = &'a PathSegment>>)> {
-    let mut segments = path.path.iter_items().peekable();
-
+    segments: &mut std::iter::Peekable<S>,
+) -> CampResult<ModId> {
     let base = match segments.peek().expect("Expected to parse a path") {
         PathSegment::Site(_) => {
             segments.next();
@@ -94,7 +93,7 @@ pub fn lower_first_path_segment<'a>(
         }
         PathSegment::Super(tok) => {
             segments.next();
-            db.parent_of(module).ok_or_else(|| ResolveError::NoParent {
+            db.parent_of_mod(module).ok_or_else(|| ResolveError::NoParent {
                 module: db.mod_name(module),
                 span: tok.span,
             })?
@@ -124,7 +123,7 @@ pub fn lower_first_path_segment<'a>(
         pat => bail!(ResolveError::UnrecognizedPathSegment(pat.span())),
     };
 
-    Ok((base, segments))
+    Ok(base)
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -360,6 +359,12 @@ fn populate_items(
                     Item::Trait(t.id),
                     Visibility::from(&t.viz),
                 )?;
+            }
+            AstItem::Assoc(a) => {
+                bail!(ResolveError::UnexpectedAssoc {
+                    span: a.ident.span,
+                    name: a.ident.ident.to_owned(),
+                });
             }
             AstItem::Impl(_) => {
                 // Cannot be referenced by name, so it doesn't declare an item

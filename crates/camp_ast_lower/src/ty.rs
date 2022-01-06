@@ -13,32 +13,8 @@ use crate::{
 };
 
 impl<T: ResolveContext> Resolver<T> {
-    pub fn fresh_ty_id(&self) -> TyId {
-        self.rcx.fresh_ty_id()
-    }
-
-    pub fn record_ty(&self, ty: Ty) -> Arc<Ty> {
-        self.rcx.record_ty(ty)
-    }
-
-    pub fn fresh_infer_lifetime(&self, span: Span) -> CampResult<Lifetime> {
-        self.rcx.fresh_infer_lifetime(span)
-    }
-
-    pub fn resolve_lifetime(&self, l: &ast::Lifetime) -> CampResult<Lifetime> {
-        self.rcx.resolve_lifetime(l)
-    }
-
-    pub fn fresh_infer_ty(&self, span: Span) -> CampResult<Arc<Ty>> {
-        self.rcx.fresh_infer_ty(span)
-    }
-
-    pub fn self_ty(&self, span: Span) -> CampResult<Arc<Ty>> {
-        Ok(self.record_ty(Ty { span, id: self.fresh_ty_id(), kind: self.rcx.self_ty_kind()? }))
-    }
-
     pub fn fresh_dyn_placeholder(&self, span: Span) -> Arc<Ty> {
-        self.record_ty(Ty { id: self.fresh_ty_id(), span, kind: TyKind::DynPlaceholder })
+        self.rcx.record_ty(TyKind::DynPlaceholder, span)
     }
 
     pub fn resolve_ty(&self, t: &ast::Ty) -> CampResult<Arc<Ty>> {
@@ -56,11 +32,15 @@ impl<T: ResolveContext> Resolver<T> {
         if let Some(return_ty) = return_ty {
             self.resolve_ty(&return_ty.ty)
         } else {
-            Ok(self.record_ty(Ty {
-                id: self.fresh_ty_id(),
-                span: otherwise_span,
-                kind: if infer { TyKind::Infer } else { TyKind::Tuple(vec![]) },
-            }))
+            Ok(self.rcx.record_ty(
+                if infer {
+                    self.rcx.check_infer_allowed(otherwise_span)?;
+                    TyKind::Infer
+                } else {
+                    TyKind::Tuple(vec![])
+                },
+                otherwise_span,
+            ))
         }
     }
 
@@ -87,11 +67,10 @@ impl<T: ResolveContext> Resolver<T> {
             ast::Ty::Path(p) => {
                 return Ok((self.resolve_path_ty(p)?, None));
             }
-            ast::Ty::SelfTy(_) => {
-                return Ok((self.self_ty(span)?, None));
-            }
+            ast::Ty::SelfTy(_) => self.rcx.self_ty_kind(span)?,
             ast::Ty::Infer(_) => {
-                return Ok((self.fresh_infer_ty(span)?, None));
+                self.rcx.check_infer_allowed(span)?;
+                TyKind::Infer
             }
             ast::Ty::Group(g) => {
                 if g.tys.len() == 1 && g.tys.trailing() {
@@ -104,8 +83,8 @@ impl<T: ResolveContext> Resolver<T> {
             }
             ast::Ty::Reference(r) => {
                 let l = r.prefix.lifetime.as_ref().map_or_else(
-                    || self.fresh_infer_lifetime(r.prefix.amp_tok.span),
-                    |l| self.resolve_lifetime(l),
+                    || self.rcx.fresh_infer_lifetime(r.prefix.amp_tok.span),
+                    |l| self.rcx.resolve_lifetime(l),
                 )?;
                 TyKind::Reference(
                     l,
@@ -142,7 +121,7 @@ impl<T: ResolveContext> Resolver<T> {
             )?),
         };
 
-        Ok((self.record_ty(Ty { id: self.fresh_ty_id(), span, kind }), None))
+        Ok((self.rcx.record_ty(kind, span), None))
     }
 
     pub fn resolve_path_ty(&self, path: &ast::Path) -> CampResult<Arc<Ty>> {
@@ -151,21 +130,23 @@ impl<T: ResolveContext> Resolver<T> {
         let kind = match item {
             Res::Struct(id, generics) => TyKind::Struct(id, generics),
             Res::Enum(id, generics) => TyKind::Enum(id, generics),
+            Res::Generic(id) => TyKind::Generic(id),
             Res::Mod(_) | Res::EnumVariant(_, _, _) | Res::Function(_, _) | Res::Trait(_, _) => {
                 bail!(LoweringError::NotAType(span, item.kind()))
             }
         };
-        let mut ty = self.record_ty(Ty { id: self.fresh_ty_id(), span, kind });
+
+        println!("{:?}", kind);
+
+        let mut ty = self.rcx.record_ty(kind, span);
 
         while let Some(segment) = rest.next() {
             match segment {
                 ast::PathSegment::Ident(ident) => {
                     span = span.until(ident.span);
-                    ty = self.record_ty(Ty {
-                        span,
-                        id: self.fresh_ty_id(),
-                        kind: TyKind::Assoc(ty, None, self.intern_string(&ident.ident)),
-                    });
+                    ty = self
+                        .rcx
+                        .record_ty(TyKind::Assoc(ty, None, self.intern_string(&ident.ident)), span);
                 }
                 s => bail!(LoweringError::UnrecognizedPathSegment(s.span(), "identifier")),
             }
@@ -200,16 +181,15 @@ impl<T: ResolveContext> Resolver<T> {
                 let id = id.expect_trait(fun.fn_kind.span())?;
 
                 let param_span = fun.lparen_tok.span.until(fun.rparen_tok.span);
-                let param_tuple_ty = self.record_ty(Ty {
-                    span: param_span,
-                    kind: TyKind::Tuple(
+                let param_tuple_ty = self.rcx.record_ty(
+                    TyKind::Tuple(
                         fun.param_tys
                             .iter_items()
                             .map(|ty| self.resolve_ty(ty))
                             .try_collect_vec()?,
                     ),
-                    id: self.fresh_ty_id(),
-                });
+                    param_span,
+                );
 
                 let (bindings, return_ty_span) = if let Some(return_ty) = &fun.return_ty {
                     let span = return_ty.ty.span();
@@ -240,7 +220,7 @@ impl<T: ResolveContext> Resolver<T> {
         Ok(TraitPredicate { id, self_ty, generics })
     }
 
-    fn resolve_supertraits<'a>(
+    pub fn resolve_supertraits<'a>(
         &self,
         self_ty: Arc<Ty>,
         supertraits: impl Iterator<Item = &'a ast::Supertrait>,
@@ -257,8 +237,31 @@ impl<T: ResolveContext> Resolver<T> {
                     )?));
                 }
                 ast::Supertrait::Lifetime(lt) => {
-                    predicates
-                        .push(Predicate::TypeOutlives(self_ty.clone(), self.resolve_lifetime(lt)?));
+                    predicates.push(Predicate::TypeOutlives(
+                        self_ty.clone(),
+                        self.rcx.resolve_lifetime(lt)?,
+                    ));
+                }
+            }
+        }
+
+        Ok(predicates)
+    }
+
+    pub fn resolve_lifetime_supertraits<'a>(
+        &self,
+        lifetime: Lifetime,
+        supertraits: impl Iterator<Item = &'a ast::Supertrait>,
+    ) -> CampResult<Vec<Predicate>> {
+        let mut predicates = vec![];
+
+        for supertrait in supertraits {
+            match supertrait {
+                ast::Supertrait::Trait(trait_ty) => {
+                    bail!(LoweringError::InvalidLifetimeBound(trait_ty.span()))
+                }
+                ast::Supertrait::Lifetime(lt) => {
+                    predicates.push(Predicate::Outlives(lifetime, self.rcx.resolve_lifetime(lt)?));
                 }
             }
         }

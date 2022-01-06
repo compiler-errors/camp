@@ -1,13 +1,52 @@
 use std::{collections::HashMap, sync::Arc};
 
-use ast::Span;
-use camp_ast as ast;
+use camp_ast::{self as ast, ItemId, Span};
 use camp_hir::{foreach_lang_item, CampResult, LangItem};
 use camp_import_resolve::Item;
 use camp_util::bail;
 use maplit::hashmap;
 
 use crate::{resolver::check_duplicate, result::LoweringError, HirDb};
+
+pub fn generics_count(db: &dyn HirDb, id: ItemId) -> CampResult<(usize, usize, bool)> {
+    let mut bindings_allowed = false;
+    let (lifetimes, tys) = match db.item_ast(id)? {
+        ast::Item::Struct(s) => count_generics(s.generics.as_ref()),
+        ast::Item::Enum(e) => count_generics(e.generics.as_ref()),
+        ast::Item::Function(f) => count_generics(f.sig.generics.as_ref()),
+        ast::Item::Trait(t) => {
+            bindings_allowed = true;
+            count_generics(t.generics.as_ref())
+        }
+        ast::Item::Mod(_)
+        | ast::Item::Extern(_)
+        | ast::Item::Use(_)
+        | ast::Item::Impl(_)
+        | ast::Item::Assoc(_) => unreachable!(),
+    };
+
+    Ok((lifetimes, tys, bindings_allowed))
+}
+
+fn count_generics(generics: Option<&ast::GenericsDecl>) -> (usize, usize) {
+    if let Some(generics) = generics {
+        let mut lifetimes = 0;
+        let mut tys = 0;
+        for g in generics.generics.iter_items() {
+            match g {
+                ast::GenericDecl::Lifetime(_) => {
+                    lifetimes += 1;
+                }
+                ast::GenericDecl::Ident(_) => {
+                    tys += 1;
+                }
+            }
+        }
+        (lifetimes, tys)
+    } else {
+        (0, 0)
+    }
+}
 
 pub fn lang_items(db: &dyn HirDb) -> CampResult<Arc<HashMap<LangItem, Item>>> {
     let std = db.std_ast()?;
@@ -26,32 +65,37 @@ fn collect_lang_items(
         let attrs;
         let id;
 
+        // FIXME: Iterate recursively into impl and trait, too
         match i {
-            ast::ModuleItem::Mod(m) => {
+            ast::Item::Mod(m) => {
                 collect_lang_items(&m, lang_items, seen)?;
                 continue;
             }
-            ast::ModuleItem::Extern(_) | ast::ModuleItem::Use(_) => {
+            ast::Item::Extern(_) | ast::Item::Use(_) => {
                 continue;
             }
-            ast::ModuleItem::Struct(i) => {
+            ast::Item::Struct(i) => {
                 attrs = &i.attrs;
                 id = i.id.into();
             }
-            ast::ModuleItem::Enum(i) => {
+            ast::Item::Enum(i) => {
                 attrs = &i.attrs;
                 id = i.id.into();
             }
-            ast::ModuleItem::Function(i) => {
+            ast::Item::Function(i) => {
                 attrs = &i.sig.attrs;
                 id = i.id.into();
             }
-            ast::ModuleItem::Trait(i) => {
+            ast::Item::Trait(i) => {
                 attrs = &i.attrs;
                 id = i.id.into();
             }
-            ast::ModuleItem::Impl(i) => {
+            ast::Item::Impl(i) => {
                 // FIXME: impls cannot be lang-items...
+                return Ok(());
+            }
+            ast::Item::Assoc(_) => {
+                // FIXME: assoc item is not expected here...
                 return Ok(());
             }
         }

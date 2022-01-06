@@ -5,8 +5,8 @@ use camp_util::{id_type, wrapper_id_type};
 use derivative::Derivative;
 
 use crate::{
-    punctuated::Punctuated, tok, CampsiteId, Expr, ExprLiteral, Function, Path, Signature, Span,
-    Supertraits, TraitTy, Ty, Visibility,
+    punctuated::Punctuated, tok, CampsiteId, ExprLiteral, Function, Path, Span, Supertraits,
+    TraitTy, Ty, Visibility,
 };
 
 id_type!(pub ModId);
@@ -31,20 +31,27 @@ pub struct SubmodDecl {
 pub struct Mod {
     #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
     pub id: ModId,
-    pub items: Vec<ModuleItem>,
+    pub items: Vec<Item>,
 }
 
 id_type!(pub ItemId);
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct ItemDecl {
-    pub mod_id: ModId,
+    pub parent: ItemParent,
     pub idx: usize,
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum ItemParent {
+    Mod(ModId),
+    Trait(TraitId),
+    Impl(ImplId),
 }
 
 #[derive(Clone, Hash, PartialEq, Eq, Derivative)]
 #[derivative(Debug)]
-pub enum ModuleItem {
+pub enum Item {
     #[derivative(Debug = "transparent")]
     Mod(Arc<Mod>),
     #[derivative(Debug = "transparent")]
@@ -61,6 +68,8 @@ pub enum ModuleItem {
     Trait(Arc<Trait>),
     #[derivative(Debug = "transparent")]
     Impl(Arc<Impl>),
+    #[derivative(Debug = "transparent")]
+    Assoc(Arc<Assoc>),
 }
 
 #[derive(Derivative, Hash, PartialEq, Eq)]
@@ -148,6 +157,12 @@ pub struct GenericsDecl {
     pub lt_tok: tok::Lt,
     pub generics: Punctuated<GenericDecl, tok::Comma>,
     pub gt_tok: tok::Gt,
+}
+
+impl GenericsDecl {
+    pub fn span(&self) -> Span {
+        self.lt_tok.span.until(self.gt_tok.span)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -280,49 +295,8 @@ pub struct Trait {
     pub supertraits: Option<Supertraits>,
     pub where_clause: Option<WhereClause>,
     pub lcurly_tok: tok::LCurly,
-    pub trait_items: Vec<TraitItem>,
+    pub items: Vec<Item>,
     pub rcurly_tok: tok::RCurly,
-}
-
-id_type!(pub TraitItemId);
-
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct TraitItemDecl {
-    pub trait_id: TraitId,
-    pub idx: usize,
-}
-
-#[derive(Derivative, PartialEq, Eq, Hash)]
-#[derivative(Debug)]
-pub enum TraitItem {
-    #[derivative(Debug = "transparent")]
-    Fn(Arc<TraitFunction>),
-    #[derivative(Debug = "transparent")]
-    Type(Arc<TraitType>),
-}
-
-wrapper_id_type!(pub TraitFnId => TraitItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct TraitFunction {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: TraitFnId,
-    pub signature: Signature,
-    pub semi_tok: tok::Semicolon,
-}
-
-wrapper_id_type!(pub TraitTypeId => TraitItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct TraitType {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: TraitTypeId,
-    pub type_tok: tok::Type,
-    pub ident: tok::Ident,
-    pub supertraits: Option<Supertraits>,
-    pub semi_tok: tok::Semicolon,
 }
 
 wrapper_id_type!(pub ImplId => ItemId);
@@ -337,8 +311,9 @@ pub struct Impl {
     pub generics: Option<GenericsDecl>,
     pub impl_trait: Option<ImplTrait>,
     pub ty: Ty,
+    pub where_clause: Option<WhereClause>,
     pub lcurly_tok: tok::LCurly,
-    pub impl_items: Vec<ImplItem>,
+    pub items: Vec<Item>,
     pub rcurly_tok: tok::RCurly,
 }
 
@@ -348,44 +323,35 @@ pub struct ImplTrait {
     pub for_tok: tok::For,
 }
 
-id_type!(pub ImplItemId);
-
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct ImplItemDecl {
-    pub impl_id: ImplId,
-    pub idx: usize,
-}
-
-#[derive(Derivative, PartialEq, Eq, Hash)]
-#[derivative(Debug)]
-pub enum ImplItem {
-    #[derivative(Debug = "transparent")]
-    Function(Arc<ImplFunction>),
-    #[derivative(Debug = "transparent")]
-    Type(Arc<ImplType>),
-}
-
-wrapper_id_type!(pub ImplFnId => ImplItemId);
+wrapper_id_type!(pub AssocId => ItemId);
 
 #[derive(Derivative, Hash, PartialEq, Eq)]
 #[derivative(Debug)]
-pub struct ImplFunction {
+pub struct Assoc {
     #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: ImplFnId,
-    pub signature: Signature,
-    pub body: Expr,
-}
-
-wrapper_id_type!(pub ImplTypeId => ImplItemId);
-
-#[derive(Derivative, Hash, PartialEq, Eq)]
-#[derivative(Debug)]
-pub struct ImplType {
-    #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
-    pub id: ImplTypeId,
+    pub id: AssocId,
     pub type_tok: tok::Type,
     pub ident: tok::Ident,
+    pub style: AssocStyle,
+    pub semi_tok: tok::Semicolon,
+}
+
+#[derive(Derivative, Hash, PartialEq, Eq)]
+#[derivative(Debug)]
+pub enum AssocStyle {
+    #[derivative(Debug = "transparent")]
+    ImplAssoc(ImplAssoc),
+    #[derivative(Debug = "transparent")]
+    TraitAssoc(TraitAssoc),
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct ImplAssoc {
     pub eq_tok: tok::Eq,
     pub ty: Ty,
-    pub semi_tok: tok::Semicolon,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct TraitAssoc {
+    pub supertraits: Option<Supertraits>,
 }
