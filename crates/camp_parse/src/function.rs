@@ -1,6 +1,6 @@
 use camp_ast::{
     tok, Function, FunctionId, Parameter, ParameterNamed, ParameterSelf, ParameterSelfRef,
-    ParseAttrs, ReturnTy, Signature,
+    ParseAttrs, ReturnTy, Signature, FunctionBody,
 };
 
 use crate::{
@@ -13,10 +13,18 @@ impl Parse for Function {
     type Context = FunctionId;
 
     fn parse_with(input: &mut ParseBuffer<'_>, ctx: FunctionId) -> CampResult<Self> {
-        Ok(Function {
-            id: ctx,
-            sig: input.parse_with(ParseAttrs(true))?,
-            body: expr_block(input, ExprContext::any_expr())?,
+        Ok(Function { id: ctx, sig: input.parse_with(ParseAttrs(true))?, body: input.parse()? })
+    }
+}
+
+impl Parse for FunctionBody {
+    type Context = ();
+
+    fn parse_with(input: &mut ParseBuffer<'_>, _ctx: ()) -> CampResult<Self> {
+        Ok(if input.peek::<tok::Semicolon>() {
+            FunctionBody::Missing(input.parse()?)
+        } else {
+            FunctionBody::Body(expr_block(input, ExprContext::any_expr())?)
         })
     }
 }

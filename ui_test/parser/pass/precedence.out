@@ -25,13 +25,15 @@ Mod {
                         let_tok: Let,
                         pat: PatPath {
                             mut_tok: None,
-                            path: Punctuated {
-                                items: [],
-                                last: Some(
-                                    Ident {
-                                        ident: "x",
-                                    },
-                                ),
+                            path: Path {
+                                path: Punctuated {
+                                    items: [],
+                                    last: Some(
+                                        Ident {
+                                            ident: "x",
+                                        },
+                                    ),
+                                },
                             },
                         },
                         maybe_ty: None,
@@ -42,23 +44,31 @@ Mod {
                                     left: Number {
                                         value: "2",
                                     },
-                                    op: Multiply,
+                                    op: Multiply(
+                                        Star,
+                                    ),
                                     right: Number {
                                         value: "3",
                                     },
                                 },
-                                op: Add,
+                                op: Add(
+                                    Plus,
+                                ),
                                 right: ExprBinary {
                                     left: Number {
                                         value: "4",
                                     },
-                                    op: Multiply,
+                                    op: Multiply(
+                                        Star,
+                                    ),
                                     right: Number {
                                         value: "5",
                                     },
                                 },
                             },
-                            op: Add,
+                            op: Add(
+                                Plus,
+                            ),
                             right: Number {
                                 value: "6",
                             },

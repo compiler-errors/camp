@@ -25,13 +25,15 @@ Mod {
                         let_tok: Let,
                         pat: PatPath {
                             mut_tok: None,
-                            path: Punctuated {
-                                items: [],
-                                last: Some(
-                                    Ident {
-                                        ident: "x",
-                                    },
-                                ),
+                            path: Path {
+                                path: Punctuated {
+                                    items: [],
+                                    last: Some(
+                                        Ident {
+                                            ident: "x",
+                                        },
+                                    ),
+                                },
                             },
                         },
                         maybe_ty: None,

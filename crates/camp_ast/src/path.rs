@@ -1,4 +1,5 @@
 use camp_files::Span;
+use derivative::Derivative;
 
 use crate::{punctuated::Punctuated, tok, Generics};
 
@@ -17,14 +18,22 @@ impl Path {
     }
 }
 
-#[derive(Debug, Hash, Eq, PartialEq)]
+#[derive(Derivative, Hash, Eq, PartialEq)]
+#[derivative(Debug)]
 pub enum PathSegment {
+    #[derivative(Debug = "transparent")]
     Site(tok::Site),
+    #[derivative(Debug = "transparent")]
     Super(tok::Super),
+    #[derivative(Debug = "transparent")]
     Mod(tok::Mod),
+    #[derivative(Debug = "transparent")]
     Extern(tok::Extern),
+    #[derivative(Debug = "transparent")]
     Ident(tok::Ident),
+    #[derivative(Debug = "transparent")]
     Generics(Generics),
+    #[derivative(Debug = "transparent")]
     Star(tok::Star),
 }
 

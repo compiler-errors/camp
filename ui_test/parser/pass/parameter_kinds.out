@@ -11,9 +11,9 @@ Mod {
             supertraits: None,
             where_clause: None,
             lcurly_tok: LCurly,
-            trait_items: [
-                TraitFunction {
-                    signature: Signature {
+            items: [
+                Function {
+                    sig: Signature {
                         attrs: [],
                         viz: Private,
                         fn_tok: Fn,
@@ -35,10 +35,10 @@ Mod {
                         rparen_tok: RParen,
                         return_ty: None,
                     },
-                    semi_tok: Semicolon,
+                    body: Semicolon,
                 },
-                TraitFunction {
-                    signature: Signature {
+                Function {
+                    sig: Signature {
                         attrs: [],
                         viz: Private,
                         fn_tok: Fn,
@@ -64,10 +64,10 @@ Mod {
                         rparen_tok: RParen,
                         return_ty: None,
                     },
-                    semi_tok: Semicolon,
+                    body: Semicolon,
                 },
-                TraitFunction {
-                    signature: Signature {
+                Function {
+                    sig: Signature {
                         attrs: [],
                         viz: Private,
                         fn_tok: Fn,
@@ -95,10 +95,10 @@ Mod {
                         rparen_tok: RParen,
                         return_ty: None,
                     },
-                    semi_tok: Semicolon,
+                    body: Semicolon,
                 },
-                TraitFunction {
-                    signature: Signature {
+                Function {
+                    sig: Signature {
                         attrs: [],
                         viz: Private,
                         fn_tok: Fn,
@@ -122,10 +122,10 @@ Mod {
                         rparen_tok: RParen,
                         return_ty: None,
                     },
-                    semi_tok: Semicolon,
+                    body: Semicolon,
                 },
-                TraitFunction {
-                    signature: Signature {
+                Function {
+                    sig: Signature {
                         attrs: [],
                         viz: Private,
                         fn_tok: Fn,
@@ -155,10 +155,10 @@ Mod {
                         rparen_tok: RParen,
                         return_ty: None,
                     },
-                    semi_tok: Semicolon,
+                    body: Semicolon,
                 },
-                TraitFunction {
-                    signature: Signature {
+                Function {
+                    sig: Signature {
                         attrs: [],
                         viz: Private,
                         fn_tok: Fn,
@@ -190,10 +190,10 @@ Mod {
                         rparen_tok: RParen,
                         return_ty: None,
                     },
-                    semi_tok: Semicolon,
+                    body: Semicolon,
                 },
-                TraitFunction {
-                    signature: Signature {
+                Function {
+                    sig: Signature {
                         attrs: [],
                         viz: Private,
                         fn_tok: Fn,
@@ -211,17 +211,19 @@ Mod {
                                         mut_tok: Some(
                                             Mut,
                                         ),
-                                        path: Punctuated {
-                                            items: [],
-                                            last: Some(
-                                                Ident {
-                                                    ident: "a",
-                                                },
-                                            ),
+                                        path: Path {
+                                            path: Punctuated {
+                                                items: [],
+                                                last: Some(
+                                                    Ident {
+                                                        ident: "a",
+                                                    },
+                                                ),
+                                            },
                                         },
                                     },
                                     colon_tok: Colon,
-                                    ty: TyPath {
+                                    ty: Path {
                                         path: Punctuated {
                                             items: [],
                                             last: Some(
@@ -230,7 +232,6 @@ Mod {
                                                 },
                                             ),
                                         },
-                                        generics: None,
                                     },
                                 },
                             ),
@@ -238,10 +239,10 @@ Mod {
                         rparen_tok: RParen,
                         return_ty: None,
                     },
-                    semi_tok: Semicolon,
+                    body: Semicolon,
                 },
-                TraitFunction {
-                    signature: Signature {
+                Function {
+                    sig: Signature {
                         attrs: [],
                         viz: Private,
                         fn_tok: Fn,
@@ -257,13 +258,15 @@ Mod {
                                 ParameterNamed {
                                     pat: PatPath {
                                         mut_tok: None,
-                                        path: Punctuated {
-                                            items: [],
-                                            last: Some(
-                                                Ident {
-                                                    ident: "b",
-                                                },
-                                            ),
+                                        path: Path {
+                                            path: Punctuated {
+                                                items: [],
+                                                last: Some(
+                                                    Ident {
+                                                        ident: "b",
+                                                    },
+                                                ),
+                                            },
                                         },
                                     },
                                     colon_tok: Colon,
@@ -274,7 +277,7 @@ Mod {
                         rparen_tok: RParen,
                         return_ty: None,
                     },
-                    semi_tok: Semicolon,
+                    body: Semicolon,
                 },
             ],
             rcurly_tok: RCurly,

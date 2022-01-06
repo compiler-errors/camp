@@ -1,4 +1,4 @@
-error: Expected `let`, `&`, `*`, `-`, `!`, `...`, `..=`, `..`, lifetime, `loop`, `while`, `for`, {, identifier, `site`, `<`, number, (, [, `match`, `if`, `break`, `continue`, `return`, or `|`
+error: Expected `let`, `&`, `*`, `-`, `!`, `...`, `..=`, `..`, lifetime, `loop`, `while`, `for`, {, `<`, number, (, [, `match`, `if`, `break`, `continue`, `return`, `|`, `site`, `super`, `mod`, `extern`, or identifier
   ┌─ $DIR/example.camp:3:1
   │
 3 │ }

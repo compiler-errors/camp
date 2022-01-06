@@ -19,7 +19,7 @@ Mod {
                 return_ty: Some(
                     ReturnTy {
                         arrow_tok: Arrow,
-                        ty: TyPath {
+                        ty: Path {
                             path: Punctuated {
                                 items: [],
                                 last: Some(
@@ -28,7 +28,6 @@ Mod {
                                     },
                                 ),
                             },
-                            generics: None,
                         },
                     },
                 ),
@@ -43,7 +42,7 @@ Mod {
                                 value: "1",
                             },
                             as_tok: As,
-                            ty: TyPath {
+                            ty: Path {
                                 path: Punctuated {
                                     items: [],
                                     last: Some(
@@ -52,16 +51,17 @@ Mod {
                                         },
                                     ),
                                 },
-                                generics: None,
                             },
                         },
-                        op: Add,
+                        op: Add(
+                            Plus,
+                        ),
                         right: ExprCast {
                             expr: Number {
                                 value: "2",
                             },
                             as_tok: As,
-                            ty: TyPath {
+                            ty: Path {
                                 path: Punctuated {
                                     items: [],
                                     last: Some(
@@ -70,7 +70,6 @@ Mod {
                                         },
                                     ),
                                 },
-                                generics: None,
                             },
                         },
                     },

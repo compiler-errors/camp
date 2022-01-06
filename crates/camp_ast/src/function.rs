@@ -14,7 +14,16 @@ pub struct Function {
     #[cfg_attr(feature = "ignore_ids", derivative(Debug = "ignore"))]
     pub id: FunctionId,
     pub sig: Signature,
-    pub body: Expr,
+    pub body: FunctionBody,
+}
+
+#[derive(Derivative, Hash, PartialEq, Eq)]
+#[derivative(Debug)]
+pub enum FunctionBody {
+    #[derivative(Debug = "transparent")]
+    Missing(tok::Semicolon),
+    #[derivative(Debug = "transparent")]
+    Body(Expr),
 }
 
 pub struct ParseAttrs(pub bool);
